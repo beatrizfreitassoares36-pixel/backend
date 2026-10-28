@@ -1,0 +1,4 @@
+ALTER TABLE saidas
+    ENGINE=InnoDB,
+    MODIFY id_saida INT(11) NOT NULL AUTO_INCREMENT,
+    ADD PRIMARY KEY (id_saida);
