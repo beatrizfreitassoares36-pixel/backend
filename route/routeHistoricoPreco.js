@@ -1,16 +1,20 @@
 const express = require('express');
 const router = express.Router();
-const { query, validarId, validarData, responderErro } = require('./helpers');
+const { HistoricoPreco, Produto } = require('../models');
+const { validarId, validarData, responderErro } = require('./helpers');
 
 router.get('/', async (req, res) => {
     try {
-        const historico = await query(
-            `SELECT h.id_historico, h.id_produto, p.nome AS produto,
-                    h.preco, h.vigencia
-             FROM historico_precos h
-             LEFT JOIN produtos p ON p.id_produto = h.id_produto
-             ORDER BY h.vigencia DESC, h.id_historico DESC`
-        );
+        const registros = await HistoricoPreco.findAll({
+            attributes: ['id_historico', 'id_produto', 'preco', 'vigencia'],
+            include: [{ model: Produto, as: 'produtoInfo', attributes: ['nome'] }],
+            order: [['vigencia', 'DESC'], ['id_historico', 'DESC']]
+        });
+        const historico = registros.map(registro => {
+            const item = { ...registro.toJSON(), produto: registro.produtoInfo?.nome ?? null };
+            delete item.produtoInfo;
+            return item;
+        });
         return res.status(200).send({ historico });
     } catch (error) {
         return responderErro(res, error, 'Erro ao buscar histórico de preços.');
@@ -22,18 +26,16 @@ router.get('/:id', async (req, res) => {
         return res.status(400).send({ mensagem: 'ID inválido.' });
     }
     try {
-        const resultado = await query(
-            `SELECT h.id_historico, h.id_produto, p.nome AS produto,
-                    h.preco, h.vigencia
-             FROM historico_precos h
-             LEFT JOIN produtos p ON p.id_produto = h.id_produto
-             WHERE h.id_historico = ?`,
-            [req.params.id]
-        );
-        if (!resultado.length) {
+        const registro = await HistoricoPreco.findByPk(req.params.id, {
+            attributes: ['id_historico', 'id_produto', 'preco', 'vigencia'],
+            include: [{ model: Produto, as: 'produtoInfo', attributes: ['nome'] }]
+        });
+        if (!registro) {
             return res.status(404).send({ mensagem: 'Registro de preço não encontrado.' });
         }
-        return res.status(200).send({ registro: resultado[0] });
+        const item = { ...registro.toJSON(), produto: registro.produtoInfo?.nome ?? null };
+        delete item.produtoInfo;
+        return res.status(200).send({ registro: item });
     } catch (error) {
         return responderErro(res, error, 'Erro ao buscar registro de preço.');
     }
@@ -54,13 +56,14 @@ router.post('/', async (req, res) => {
     }
 
     try {
-        const result = await query(
-            'INSERT INTO historico_precos (id_produto, preco, vigencia) VALUES (?, ?, ?)',
-            [Number(id_produto), Number(preco), vigencia]
-        );
+        const registro = await HistoricoPreco.create({
+            id_produto: Number(id_produto),
+            preco: Number(preco),
+            vigencia
+        });
         return res.status(201).send({
             mensagem: 'Preço registrado no histórico.',
-            id_historico: result.insertId
+            id_historico: registro.id_historico
         });
     } catch (error) {
         return responderErro(res, error, 'Erro ao registrar preço.');

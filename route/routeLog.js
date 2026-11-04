@@ -1,13 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const { query, validarId, responderErro } = require('./helpers');
+const { Log } = require('../models');
+const { validarId, responderErro } = require('./helpers');
 
 router.get('/', async (req, res) => {
     try {
-        const logs = await query(
-            `SELECT id_log, usuario, tabela_afetada, acao, registro, data_hora
-             FROM logs ORDER BY id_log DESC`
-        );
+        const logs = await Log.findAll({
+            attributes: ['id_log', 'usuario', 'tabela_afetada', 'acao', 'registro', 'data_hora'],
+            order: [['id_log', 'DESC']],
+            raw: true
+        });
         return res.status(200).send({ logs });
     } catch (error) {
         return responderErro(res, error, 'Erro ao buscar logs.');
@@ -19,15 +21,14 @@ router.get('/:id', async (req, res) => {
         return res.status(400).send({ mensagem: 'ID inválido.' });
     }
     try {
-        const resultado = await query(
-            `SELECT id_log, usuario, tabela_afetada, acao, registro, data_hora
-             FROM logs WHERE id_log = ?`,
-            [req.params.id]
-        );
-        if (!resultado.length) {
+        const log = await Log.findByPk(req.params.id, {
+            attributes: ['id_log', 'usuario', 'tabela_afetada', 'acao', 'registro', 'data_hora'],
+            raw: true
+        });
+        if (!log) {
             return res.status(404).send({ mensagem: 'Log não encontrado.' });
         }
-        return res.status(200).send({ log: resultado[0] });
+        return res.status(200).send({ log });
     } catch (error) {
         return responderErro(res, error, 'Erro ao buscar log.');
     }
@@ -51,14 +52,16 @@ router.post('/', async (req, res) => {
     }
 
     try {
-        const result = await query(
-            `INSERT INTO logs (usuario, tabela_afetada, acao, registro, data_hora)
-             VALUES (?, ?, ?, ?, ?)`,
-            [usuario, tabela_afetada, acao, registro === null ? null : Number(registro), data_hora]
-        );
+        const log = await Log.create({
+            usuario,
+            tabela_afetada,
+            acao,
+            registro: registro === null ? null : Number(registro),
+            data_hora
+        });
         return res.status(201).send({
             mensagem: 'Log registrado.',
-            id_log: result.insertId
+            id_log: log.id_log
         });
     } catch (error) {
         return responderErro(res, error, 'Erro ao registrar log.');

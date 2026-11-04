@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { query, validarId, responderErro } = require('./helpers');
+const { PedidoItem, Produto } = require('../models');
+const { validarId, responderErro } = require('./helpers');
 
 function validarItem(body) {
     return Number.isInteger(Number(body.quantidade)) &&
@@ -11,13 +12,16 @@ function validarItem(body) {
 
 router.get('/', async (req, res) => {
     try {
-        const itens = await query(
-            `SELECT i.id_item, i.id_pedido, i.id_produto, p.nome AS produto,
-                    i.quantidade, i.valor_unitario, i.subtotal
-             FROM pedido_itens i
-             LEFT JOIN produtos p ON p.id_produto = i.id_produto
-             ORDER BY i.id_item DESC`
-        );
+        const registros = await PedidoItem.findAll({
+            attributes: ['id_item', 'id_pedido', 'id_produto', 'quantidade', 'valor_unitario', 'subtotal'],
+            include: [{ model: Produto, as: 'produtoInfo', attributes: ['nome'] }],
+            order: [['id_item', 'DESC']]
+        });
+        const itens = registros.map(registro => {
+            const item = { ...registro.toJSON(), produto: registro.produtoInfo?.nome ?? null };
+            delete item.produtoInfo;
+            return item;
+        });
         return res.status(200).send({ itens });
     } catch (error) {
         return responderErro(res, error, 'Erro ao buscar itens dos pedidos.');
@@ -29,18 +33,16 @@ router.get('/:id', async (req, res) => {
         return res.status(400).send({ mensagem: 'ID inválido.' });
     }
     try {
-        const itens = await query(
-            `SELECT i.id_item, i.id_pedido, i.id_produto, p.nome AS produto,
-                    i.quantidade, i.valor_unitario, i.subtotal
-             FROM pedido_itens i
-             LEFT JOIN produtos p ON p.id_produto = i.id_produto
-             WHERE i.id_item = ?`,
-            [req.params.id]
-        );
-        if (!itens.length) {
+        const registro = await PedidoItem.findByPk(req.params.id, {
+            attributes: ['id_item', 'id_pedido', 'id_produto', 'quantidade', 'valor_unitario', 'subtotal'],
+            include: [{ model: Produto, as: 'produtoInfo', attributes: ['nome'] }]
+        });
+        if (!registro) {
             return res.status(404).send({ mensagem: 'Item do pedido não encontrado.' });
         }
-        return res.status(200).send({ item: itens[0] });
+        const item = { ...registro.toJSON(), produto: registro.produtoInfo?.nome ?? null };
+        delete item.produtoInfo;
+        return res.status(200).send({ item });
     } catch (error) {
         return responderErro(res, error, 'Erro ao buscar item do pedido.');
     }
@@ -55,21 +57,16 @@ router.post('/', async (req, res) => {
     }
     const subtotal = Number((Number(body.quantidade) * Number(body.valor_unitario)).toFixed(2));
     try {
-        const result = await query(
-            `INSERT INTO pedido_itens
-             (id_pedido, id_produto, quantidade, valor_unitario, subtotal)
-             VALUES (?, ?, ?, ?, ?)`,
-            [
-                Number(body.id_pedido),
-                Number(body.id_produto),
-                Number(body.quantidade),
-                Number(body.valor_unitario),
-                subtotal
-            ]
-        );
+        const item = await PedidoItem.create({
+            id_pedido: Number(body.id_pedido),
+            id_produto: Number(body.id_produto),
+            quantidade: Number(body.quantidade),
+            valor_unitario: Number(body.valor_unitario),
+            subtotal
+        });
         return res.status(201).send({
             mensagem: 'Item adicionado ao pedido.',
-            id_item: result.insertId,
+            id_item: item.id_item,
             subtotal
         });
     } catch (error) {
@@ -86,30 +83,28 @@ router.patch('/:id', async (req, res) => {
     if (!campos.length) {
         return res.status(400).send({ mensagem: 'Informe quantidade ou valor unitário.' });
     }
-    const current = await query(
-        'SELECT quantidade, valor_unitario FROM pedido_itens WHERE id_item = ?',
-        [req.params.id]
-    ).catch(error => {
+    const current = await PedidoItem.findByPk(req.params.id, {
+        attributes: ['quantidade', 'valor_unitario'],
+        raw: true
+    }).catch(error => {
         responderErro(res, error, 'Erro ao buscar item do pedido.');
-        return null;
+        return false;
     });
-    if (!current) return;
-    if (!current.length) {
+    if (!current) {
+        if (current === false) return;
         return res.status(404).send({ mensagem: 'Item do pedido não encontrado.' });
     }
 
-    const updated = { ...current[0], ...body };
+    const updated = { ...current, ...body };
     if (!validarItem(updated)) {
         return res.status(400).send({ mensagem: 'Quantidade e valor unitário devem ser válidos.' });
     }
     const subtotal = Number((Number(updated.quantidade) * Number(updated.valor_unitario)).toFixed(2));
     try {
-        await query(
-            `UPDATE pedido_itens
-             SET ${campos.map(campo => `${campo} = ?`).join(', ')}, subtotal = ?
-             WHERE id_item = ?`,
-            [...campos.map(campo => Number(body[campo])), subtotal, req.params.id]
-        );
+        await PedidoItem.update({
+            ...Object.fromEntries(campos.map(campo => [campo, Number(body[campo])])),
+            subtotal
+        }, { where: { id_item: req.params.id } });
         return res.status(200).send({ mensagem: 'Item atualizado.', subtotal });
     } catch (error) {
         return responderErro(res, error, 'Erro ao atualizar item do pedido.');
@@ -121,8 +116,8 @@ router.delete('/:id', async (req, res) => {
         return res.status(400).send({ mensagem: 'ID inválido.' });
     }
     try {
-        const result = await query('DELETE FROM pedido_itens WHERE id_item = ?', [req.params.id]);
-        if (!result.affectedRows) {
+        const removidos = await PedidoItem.destroy({ where: { id_item: req.params.id } });
+        if (!removidos) {
             return res.status(404).send({ mensagem: 'Item do pedido não encontrado.' });
         }
         return res.status(200).send({ mensagem: 'Item removido do pedido.' });

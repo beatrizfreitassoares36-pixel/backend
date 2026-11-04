@@ -1,18 +1,22 @@
 const express = require('express');
 const router = express.Router();
-const { query, validarId, responderErro } = require('./helpers');
+const { Movimentacao, Produto } = require('../models');
+const { validarId, responderErro } = require('./helpers');
 
 const tiposPermitidos = ['E', 'S', 'A', 'P', 'T'];
 
 router.get('/', async (req, res) => {
     try {
-        const movimentacoes = await query(
-            `SELECT m.id_movimentacao, m.id_produto, p.nome AS produto,
-                    m.tipo, m.quantidade, m.data_movimentacao, m.observacao
-             FROM movimentacoes m
-             LEFT JOIN produtos p ON p.id_produto = m.id_produto
-             ORDER BY m.id_movimentacao DESC`
-        );
+        const registros = await Movimentacao.findAll({
+            attributes: ['id_movimentacao', 'id_produto', 'tipo', 'quantidade', 'data_movimentacao', 'observacao'],
+            include: [{ model: Produto, as: 'produtoInfo', attributes: ['nome'] }],
+            order: [['id_movimentacao', 'DESC']]
+        });
+        const movimentacoes = registros.map(registro => {
+            const item = { ...registro.toJSON(), produto: registro.produtoInfo?.nome ?? null };
+            delete item.produtoInfo;
+            return item;
+        });
         return res.status(200).send({ movimentacoes });
     } catch (error) {
         return responderErro(res, error, 'Erro ao buscar movimentações.');
@@ -24,18 +28,16 @@ router.get('/:id', async (req, res) => {
         return res.status(400).send({ mensagem: 'ID inválido.' });
     }
     try {
-        const resultado = await query(
-            `SELECT m.id_movimentacao, m.id_produto, p.nome AS produto,
-                    m.tipo, m.quantidade, m.data_movimentacao, m.observacao
-             FROM movimentacoes m
-             LEFT JOIN produtos p ON p.id_produto = m.id_produto
-             WHERE m.id_movimentacao = ?`,
-            [req.params.id]
-        );
-        if (!resultado.length) {
+        const registro = await Movimentacao.findByPk(req.params.id, {
+            attributes: ['id_movimentacao', 'id_produto', 'tipo', 'quantidade', 'data_movimentacao', 'observacao'],
+            include: [{ model: Produto, as: 'produtoInfo', attributes: ['nome'] }]
+        });
+        if (!registro) {
             return res.status(404).send({ mensagem: 'Movimentação não encontrada.' });
         }
-        return res.status(200).send({ movimentacao: resultado[0] });
+        const movimentacao = { ...registro.toJSON(), produto: registro.produtoInfo?.nome ?? null };
+        delete movimentacao.produtoInfo;
+        return res.status(200).send({ movimentacao });
     } catch (error) {
         return responderErro(res, error, 'Erro ao buscar movimentação.');
     }
@@ -63,21 +65,16 @@ router.post('/', async (req, res) => {
     }
 
     try {
-        const result = await query(
-            `INSERT INTO movimentacoes
-             (id_produto, tipo, quantidade, data_movimentacao, observacao)
-             VALUES (?, ?, ?, ?, ?)`,
-            [
-                id_produto === null ? null : Number(id_produto),
-                tipo || null,
-                quantidade === null ? null : Number(quantidade),
-                data_movimentacao,
-                observacao
-            ]
-        );
+        const movimentacao = await Movimentacao.create({
+            id_produto: id_produto === null ? null : Number(id_produto),
+            tipo: tipo || null,
+            quantidade: quantidade === null ? null : Number(quantidade),
+            data_movimentacao,
+            observacao
+        });
         return res.status(201).send({
             mensagem: 'Movimentação registrada.',
-            id_movimentacao: result.insertId
+            id_movimentacao: movimentacao.id_movimentacao
         });
     } catch (error) {
         return responderErro(res, error, 'Erro ao registrar movimentação.');

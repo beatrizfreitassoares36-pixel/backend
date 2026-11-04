@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const router = express.Router();
-const pool = require('../mysql').pool;
+const { Usuario } = require('../models');
 
 function validarId(id) {
     return /^\d+$/.test(id) && Number(id) > 0;
@@ -12,30 +12,10 @@ function emailValido(email) {
         /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
-function consultar(sql, valores = []) {
-    return new Promise((resolve, reject) => {
-        pool.getConnection((erroConexao, conn) => {
-            if (erroConexao) {
-                return reject(erroConexao);
-            }
-
-            conn.query(sql, valores, (erroConsulta, resultado) => {
-                conn.release();
-
-                if (erroConsulta) {
-                    return reject(erroConsulta);
-                }
-
-                resolve(resultado);
-            });
-        });
-    });
-}
-
 function responderErro(res, erro, mensagem) {
     console.error(mensagem, erro);
 
-    if (erro.code === 'ER_DUP_ENTRY') {
+    if ((erro.original?.code || erro.code) === 'ER_DUP_ENTRY') {
         return res.status(409).send({ mensagem: 'Este email já está cadastrado.' });
     }
 
@@ -45,11 +25,11 @@ function responderErro(res, erro, mensagem) {
 // LISTAR USUÁRIOS — nunca seleciona a coluna senha
 router.get('/', async (req, res) => {
     try {
-        const usuarios = await consultar(
-            `SELECT id_usu AS id_usuario, nome, email, contato, genero, ativo
-             FROM usuarios
-             WHERE ativo = 1`
-        );
+        const usuarios = await Usuario.findAll({
+            attributes: [['id_usu', 'id_usuario'], 'nome', 'email', 'contato', 'genero', 'ativo'],
+            where: { ativo: true },
+            raw: true
+        });
 
         return res.status(200).send({ usuarios });
     } catch (erro) {
@@ -64,18 +44,17 @@ router.get('/:id', async (req, res) => {
     }
 
     try {
-        const resultado = await consultar(
-            `SELECT id_usu AS id_usuario, nome, email, contato, genero, ativo
-             FROM usuarios
-             WHERE id_usu = ? AND ativo = 1`,
-            [req.params.id]
-        );
+        const usuario = await Usuario.findOne({
+            attributes: [['id_usu', 'id_usuario'], 'nome', 'email', 'contato', 'genero', 'ativo'],
+            where: { id_usu: req.params.id, ativo: true },
+            raw: true
+        });
 
-        if (resultado.length === 0) {
+        if (!usuario) {
             return res.status(404).send({ mensagem: 'Usuário não encontrado.' });
         }
 
-        return res.status(200).send({ usuario: resultado[0] });
+        return res.status(200).send({ usuario });
     } catch (erro) {
         return responderErro(res, erro, 'Erro ao buscar usuário.');
     }
@@ -107,16 +86,18 @@ router.post('/', async (req, res) => {
     try {
         const senhaHash = await bcrypt.hash(senha, 12);
 
-        const resultado = await consultar(
-            `INSERT INTO usuarios
-             (nome, email, senha, contato, genero, ativo)
-             VALUES (?, ?, ?, ?, ?, 1)`,
-            [nome.trim(), email.trim().toLowerCase(), senhaHash, contato, genero]
-        );
+        const usuario = await Usuario.create({
+            nome: nome.trim(),
+            email: email.trim().toLowerCase(),
+            senha: senhaHash,
+            contato,
+            genero,
+            ativo: true
+        });
 
         return res.status(201).send({
             mensagem: 'Usuário criado com sucesso.',
-            id_usuario: resultado.insertId
+            id_usuario: usuario.id_usu
         });
     } catch (erro) {
         return responderErro(res, erro, 'Erro ao cadastrar usuário.');
@@ -178,15 +159,12 @@ router.patch('/:id', async (req, res) => {
             valores.push(valor);
         }
 
-        const atualizacoes = campos.map(campo => `${campo} = ?`).join(', ');
-        const resultado = await consultar(
-            `UPDATE usuarios
-             SET ${atualizacoes}
-             WHERE id_usu = ? AND ativo = 1`,
-            [...valores, req.params.id]
-        );
+        const atualizacoes = Object.fromEntries(campos.map((campo, index) => [campo, valores[index]]));
+        const [afetados] = await Usuario.update(atualizacoes, {
+            where: { id_usu: req.params.id, ativo: true }
+        });
 
-        if (resultado.affectedRows === 0) {
+        if (afetados === 0) {
             return res.status(404).send({ mensagem: 'Usuário não encontrado.' });
         }
 
@@ -203,14 +181,12 @@ router.delete('/:id', async (req, res) => {
     }
 
     try {
-        const resultado = await consultar(
-            `UPDATE usuarios
-             SET ativo = 0
-             WHERE id_usu = ? AND ativo = 1`,
-            [req.params.id]
+        const [afetados] = await Usuario.update(
+            { ativo: false },
+            { where: { id_usu: req.params.id, ativo: true } }
         );
 
-        if (resultado.affectedRows === 0) {
+        if (afetados === 0) {
             return res.status(404).send({ mensagem: 'Usuário não encontrado.' });
         }
 

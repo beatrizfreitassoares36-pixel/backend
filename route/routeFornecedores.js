@@ -1,8 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const mysql = require('../mysql');
+const { Fornecedor } = require('../models');
 
 const camposPermitidos = ['nome', 'empresa', 'email', 'telefone', 'cidade', 'estado'];
+const atributos = [
+    'id_fornecedor', 'nome', 'empresa', 'email', 'telefone',
+    'cidade', 'estado', 'ativo'
+];
 
 function validarId(id) {
     return /^\d+$/.test(id) && Number(id) > 0;
@@ -13,270 +17,123 @@ function emailValido(email) {
         /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
-// LISTAR FORNECEDORES ATIVOS
-router.get('/', (req, res) => {
-    mysql.getConnection((error, conn) => {
-        if (error) {
-            return res.status(500).send({
-                mensagem: 'Erro ao conectar ao banco de dados.'
-            });
-        }
-
-        conn.query(
-            `SELECT id_fornecedor, nome, empresa, email, telefone, cidade, estado, ativo
-             FROM fornecedores
-             WHERE ativo = 1`,
-            (error, resultado) => {
-                conn.release();
-
-                if (error) {
-                    console.error('Erro ao buscar fornecedores:', error);
-                    return res.status(500).send({
-                        mensagem: 'Erro ao buscar fornecedores.'
-                    });
-                }
-
-                return res.status(200).send({ fornecedores: resultado });
-            }
-        );
-    });
-});
-
-// BUSCAR FORNECEDOR POR ID
-router.get('/:id', (req, res) => {
-    if (!validarId(req.params.id)) {
-        return res.status(400).send({ mensagem: 'ID inválido.' });
+function tratarErro(res, error, mensagem) {
+    if ((error.original?.code || error.code) === 'ER_DUP_ENTRY') {
+        return res.status(409).send({ mensagem: 'Já existe um fornecedor com esses dados.' });
     }
+    console.error(mensagem, error);
+    return res.status(500).send({ mensagem });
+}
 
-    mysql.getConnection((error, conn) => {
-        if (error) {
-            return res.status(500).send({
-                mensagem: 'Erro ao conectar ao banco de dados.'
-            });
-        }
-
-        conn.query(
-            `SELECT id_fornecedor, nome, empresa, email, telefone, cidade, estado, ativo
-             FROM fornecedores
-             WHERE id_fornecedor = ? AND ativo = 1`,
-            [req.params.id],
-            (error, resultado) => {
-                conn.release();
-
-                if (error) {
-                    console.error('Erro ao buscar fornecedor:', error);
-                    return res.status(500).send({
-                        mensagem: 'Erro ao buscar fornecedor.'
-                    });
-                }
-
-                if (resultado.length === 0) {
-                    return res.status(404).send({
-                        mensagem: 'Fornecedor não encontrado.'
-                    });
-                }
-
-                return res.status(200).send({ fornecedor: resultado[0] });
-            }
-        );
-    });
+router.get('/', async (req, res) => {
+    try {
+        const fornecedores = await Fornecedor.findAll({
+            attributes: atributos,
+            where: { ativo: true },
+            raw: true
+        });
+        return res.status(200).send({ fornecedores });
+    } catch (error) {
+        return tratarErro(res, error, 'Erro ao buscar fornecedores.');
+    }
 });
 
-// CADASTRAR FORNECEDOR
-router.post('/', (req, res) => {
+router.get('/:id', async (req, res) => {
+    if (!validarId(req.params.id)) return res.status(400).send({ mensagem: 'ID inválido.' });
+    try {
+        const fornecedor = await Fornecedor.findOne({
+            attributes: atributos,
+            where: { id_fornecedor: req.params.id, ativo: true },
+            raw: true
+        });
+        if (!fornecedor) return res.status(404).send({ mensagem: 'Fornecedor não encontrado.' });
+        return res.status(200).send({ fornecedor });
+    } catch (error) {
+        return tratarErro(res, error, 'Erro ao buscar fornecedor.');
+    }
+});
+
+router.post('/', async (req, res) => {
     const body = req.body || {};
     const { nome, empresa = null, email = null, telefone = null, cidade = null, estado = null } = body;
-
     if (typeof nome !== 'string' || !nome.trim()) {
-        return res.status(400).send({
-            mensagem: 'Informe o nome do fornecedor.'
-        });
+        return res.status(400).send({ mensagem: 'Informe o nome do fornecedor.' });
     }
-
     if (email !== null && !emailValido(email)) {
         return res.status(400).send({ mensagem: 'Email inválido.' });
     }
-
-    const camposTexto = { empresa, telefone, cidade, estado };
-    for (const [campo, valor] of Object.entries(camposTexto)) {
+    for (const [campo, valor] of Object.entries({ empresa, telefone, cidade, estado })) {
         if (valor !== null && typeof valor !== 'string') {
             return res.status(400).send({ mensagem: `${campo} inválido.` });
         }
     }
-
-    mysql.getConnection((error, conn) => {
-        if (error) {
-            return res.status(500).send({
-                mensagem: 'Erro ao conectar ao banco de dados.'
-            });
-        }
-
-        conn.query(
-            `INSERT INTO fornecedores
-             (nome, empresa, email, telefone, cidade, estado, ativo)
-             VALUES (?, ?, ?, ?, ?, ?, 1)`,
-            [
-                nome.trim(),
-                empresa,
-                email === null ? null : email.trim().toLowerCase(),
-                telefone,
-                cidade,
-                estado
-            ],
-            (error, resultado) => {
-                conn.release();
-
-                if (error) {
-                    if (error.code === 'ER_DUP_ENTRY') {
-                        return res.status(409).send({
-                            mensagem: 'Já existe um fornecedor com esses dados.'
-                        });
-                    }
-
-                    console.error('Erro ao cadastrar fornecedor:', error);
-                    return res.status(500).send({
-                        mensagem: 'Erro ao cadastrar fornecedor.'
-                    });
-                }
-
-                return res.status(201).send({
-                    mensagem: 'Fornecedor cadastrado com sucesso.',
-                    id_fornecedor: resultado.insertId
-                });
-            }
-        );
-    });
+    try {
+        const fornecedor = await Fornecedor.create({
+            nome: nome.trim(),
+            empresa,
+            email: email === null ? null : email.trim().toLowerCase(),
+            telefone,
+            cidade,
+            estado,
+            ativo: true
+        });
+        return res.status(201).send({
+            mensagem: 'Fornecedor cadastrado com sucesso.',
+            id_fornecedor: fornecedor.id_fornecedor
+        });
+    } catch (error) {
+        return tratarErro(res, error, 'Erro ao cadastrar fornecedor.');
+    }
 });
 
-// ATUALIZAR FORNECEDOR
-router.patch('/:id', (req, res) => {
-    if (!validarId(req.params.id)) {
-        return res.status(400).send({ mensagem: 'ID inválido.' });
-    }
-
+router.patch('/:id', async (req, res) => {
+    if (!validarId(req.params.id)) return res.status(400).send({ mensagem: 'ID inválido.' });
     const body = req.body || {};
     const campos = camposPermitidos.filter(campo => body[campo] !== undefined);
-
-    if (campos.length === 0) {
-        return res.status(400).send({
-            mensagem: 'Informe ao menos um campo válido para atualizar.'
-        });
+    if (!campos.length) {
+        return res.status(400).send({ mensagem: 'Informe ao menos um campo válido para atualizar.' });
     }
-
     if (body.nome !== undefined &&
         (typeof body.nome !== 'string' || !body.nome.trim())) {
         return res.status(400).send({ mensagem: 'Nome inválido.' });
     }
-
-    if (body.email !== undefined &&
-        body.email !== null &&
-        !emailValido(body.email)) {
+    if (body.email !== undefined && body.email !== null && !emailValido(body.email)) {
         return res.status(400).send({ mensagem: 'Email inválido.' });
     }
-
     for (const campo of ['empresa', 'telefone', 'cidade', 'estado']) {
-        if (body[campo] !== undefined &&
-            body[campo] !== null &&
+        if (body[campo] !== undefined && body[campo] !== null &&
             typeof body[campo] !== 'string') {
             return res.status(400).send({ mensagem: `${campo} inválido.` });
         }
     }
-
-    const valores = campos.map(campo => {
+    const atualizacoes = Object.fromEntries(campos.map(campo => {
         const valor = body[campo];
-
-        if (typeof valor !== 'string') {
-            return valor;
-        }
-
-        const texto = valor.trim();
-        return campo === 'email' ? texto.toLowerCase() : texto;
-    });
-
-    const atualizacoes = campos.map(campo => `${campo} = ?`).join(', ');
-
-    mysql.getConnection((error, conn) => {
-        if (error) {
-            return res.status(500).send({
-                mensagem: 'Erro ao conectar ao banco de dados.'
-            });
-        }
-
-        conn.query(
-            `UPDATE fornecedores
-             SET ${atualizacoes}
-             WHERE id_fornecedor = ? AND ativo = 1`,
-            [...valores, req.params.id],
-            (error, resultado) => {
-                conn.release();
-
-                if (error) {
-                    if (error.code === 'ER_DUP_ENTRY') {
-                        return res.status(409).send({
-                            mensagem: 'Já existe um fornecedor com esses dados.'
-                        });
-                    }
-
-                    console.error('Erro ao atualizar fornecedor:', error);
-                    return res.status(500).send({
-                        mensagem: 'Erro ao atualizar fornecedor.'
-                    });
-                }
-
-                if (resultado.affectedRows === 0) {
-                    return res.status(404).send({
-                        mensagem: 'Fornecedor não encontrado.'
-                    });
-                }
-
-                return res.status(200).send({
-                    mensagem: 'Fornecedor atualizado com sucesso.'
-                });
-            }
-        );
-    });
+        const normalizado = typeof valor === 'string' ? valor.trim() : valor;
+        return [campo, campo === 'email' && normalizado ? normalizado.toLowerCase() : normalizado];
+    }));
+    try {
+        const [afetados] = await Fornecedor.update(atualizacoes, {
+            where: { id_fornecedor: req.params.id, ativo: true }
+        });
+        if (!afetados) return res.status(404).send({ mensagem: 'Fornecedor não encontrado.' });
+        return res.status(200).send({ mensagem: 'Fornecedor atualizado com sucesso.' });
+    } catch (error) {
+        return tratarErro(res, error, 'Erro ao atualizar fornecedor.');
+    }
 });
 
-// EXCLUIR FORNECEDOR (EXCLUSÃO LÓGICA)
-router.delete('/:id', (req, res) => {
-    if (!validarId(req.params.id)) {
-        return res.status(400).send({ mensagem: 'ID inválido.' });
-    }
-
-    mysql.getConnection((error, conn) => {
-        if (error) {
-            return res.status(500).send({
-                mensagem: 'Erro ao conectar ao banco de dados.'
-            });
-        }
-
-        conn.query(
-            `UPDATE fornecedores
-             SET ativo = 0
-             WHERE id_fornecedor = ? AND ativo = 1`,
-            [req.params.id],
-            (error, resultado) => {
-                conn.release();
-
-                if (error) {
-                    console.error('Erro ao desativar fornecedor:', error);
-                    return res.status(500).send({
-                        mensagem: 'Erro ao desativar fornecedor.'
-                    });
-                }
-
-                if (resultado.affectedRows === 0) {
-                    return res.status(404).send({
-                        mensagem: 'Fornecedor não encontrado.'
-                    });
-                }
-
-                return res.status(200).send({
-                    mensagem: 'Fornecedor desativado com sucesso.'
-                });
-            }
+router.delete('/:id', async (req, res) => {
+    if (!validarId(req.params.id)) return res.status(400).send({ mensagem: 'ID inválido.' });
+    try {
+        const [afetados] = await Fornecedor.update(
+            { ativo: false },
+            { where: { id_fornecedor: req.params.id, ativo: true } }
         );
-    });
+        if (!afetados) return res.status(404).send({ mensagem: 'Fornecedor não encontrado.' });
+        return res.status(200).send({ mensagem: 'Fornecedor desativado com sucesso.' });
+    } catch (error) {
+        return tratarErro(res, error, 'Erro ao desativar fornecedor.');
+    }
 });
 
 module.exports = router;

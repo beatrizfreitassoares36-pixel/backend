@@ -1,7 +1,8 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { query, responderErro } = require('./helpers');
+const { Usuario } = require('../models');
+const { responderErro } = require('./helpers');
 
 const router = express.Router();
 
@@ -25,19 +26,18 @@ router.post('/login', async (req, res) => {
     }
 
     try {
-        const resultado = await query(
-            `SELECT id_usu, nome, email, senha
-             FROM usuarios
-             WHERE email = ? AND ativo = 1
-             LIMIT 1`,
-            [email.trim().toLowerCase()]
-        );
+        const usuario = await Usuario.findOne({
+            attributes: ['id_usu', 'nome', 'email', 'senha'],
+            where: {
+                email: email.trim().toLowerCase(),
+                ativo: true
+            }
+        });
 
-        if (resultado.length === 0) {
+        if (!usuario) {
             return res.status(401).send({ mensagem: 'Email ou senha inválidos.' });
         }
 
-        const usuario = resultado[0];
         const senhaCorreta = await bcrypt.compare(senha, usuario.senha);
 
         if (!senhaCorreta) {

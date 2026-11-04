@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const app = require('../app');
-const pool = require('../mysql').pool;
+const { Usuario } = require('../models');
 
 const segredoTeste = 'segredo-de-teste-para-login';
 const senhaHash = bcrypt.hashSync('senha-segura', 4);
@@ -15,12 +15,12 @@ const usuario = {
 };
 
 async function postarLogin(t, corpo, resultado, segredo = segredoTeste) {
-    const getConnectionOriginal = pool.getConnection;
+    const findOneOriginal = Usuario.findOne;
     const segredoOriginal = process.env.JWT_SECRET;
     const consultas = [];
 
     t.after(() => {
-        pool.getConnection = getConnectionOriginal;
+        Usuario.findOne = findOneOriginal;
         if (segredoOriginal === undefined) {
             delete process.env.JWT_SECRET;
         } else {
@@ -34,13 +34,10 @@ async function postarLogin(t, corpo, resultado, segredo = segredoTeste) {
         process.env.JWT_SECRET = segredo;
     }
 
-    pool.getConnection = callback => callback(null, {
-        query(sql, valores, concluir) {
-            consultas.push({ sql, valores });
-            concluir(null, resultado);
-        },
-        release() {}
-    });
+    Usuario.findOne = async options => {
+        consultas.push(options);
+        return resultado[0] || null;
+    };
 
     const servidor = app.listen(0);
     try {
@@ -78,7 +75,10 @@ test('login válido retorna token JWT e dados públicos do usuário', async t =>
     });
     assert.equal(Object.hasOwn(corpo.usuario, 'senha'), false);
     assert.equal(jwt.verify(corpo.token, segredoTeste).sub, '42');
-    assert.deepEqual(consultas[0].valores, ['teste@example.com']);
+    assert.deepEqual(consultas[0].where, {
+        email: 'teste@example.com',
+        ativo: true
+    });
 });
 
 test('login rejeita uma senha incorreta', async t => {

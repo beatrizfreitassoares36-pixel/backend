@@ -1,12 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { query, transaction, validarId, validarData, responderErro } = require('./helpers');
+const { Saida, Estoque, sequelize } = require('../models');
+const { validarId, validarData, responderErro } = require('./helpers');
 
 router.get('/', async (req, res) => {
     try {
-        const saidas = await query(
-            'SELECT * FROM saidas ORDER BY id_saida DESC'
-        );
+        const saidas = await Saida.findAll({ order: [['id_saida', 'DESC']], raw: true });
         return res.status(200).send({ saidas });
     } catch (error) {
         return responderErro(res, error, 'Erro ao buscar saídas.');
@@ -19,14 +18,11 @@ router.get('/:id', async (req, res) => {
     }
 
     try {
-        const resultado = await query(
-            'SELECT * FROM saidas WHERE id_saida = ?',
-            [req.params.id]
-        );
-        if (!resultado.length) {
+        const saida = await Saida.findByPk(req.params.id, { raw: true });
+        if (!saida) {
             return res.status(404).send({ mensagem: 'Saída não encontrada.' });
         }
-        return res.status(200).send({ saida: resultado[0] });
+        return res.status(200).send({ saida });
     } catch (error) {
         return responderErro(res, error, 'Erro ao buscar saída.');
     }
@@ -54,42 +50,39 @@ router.post('/', async (req, res) => {
     }
 
     try {
-        const resultado = await transaction(async connection => {
-            await connection.query(
-                `INSERT INTO estoque (id_produto, quantidade)
-                 VALUES (?, 0)
-                 ON DUPLICATE KEY UPDATE id_produto = VALUES(id_produto)`,
-                [Number(id_produto)]
-            );
+        const resultado = await sequelize.transaction(async transaction => {
+            await Estoque.findOrCreate({
+                where: { id_produto: Number(id_produto) },
+                defaults: { quantidade: 0 },
+                transaction
+            });
 
-            const estoque = await connection.query(
-                'SELECT quantidade FROM estoque WHERE id_produto = ? FOR UPDATE',
-                [Number(id_produto)]
-            );
-            if (!estoque.length || estoque[0].quantidade < Number(quantidade)) {
+            const estoque = await Estoque.findOne({
+                attributes: ['quantidade'],
+                where: { id_produto: Number(id_produto) },
+                transaction,
+                lock: transaction.LOCK.UPDATE
+            });
+            if (!estoque || Number(estoque.quantidade) < Number(quantidade)) {
                 const error = new Error('Estoque insuficiente.');
                 error.statusCode = 409;
                 throw error;
             }
 
-            return connection.query(
-                `INSERT INTO saidas
-                 (id_produto, id_funcionario, quantidade, valor_unitario, data_saida, destino)
-                 VALUES (?, ?, ?, ?, ?, ?)`,
-                [
-                    Number(id_produto),
-                    Number(id_funcionario),
-                    Number(quantidade),
-                    Number(valor_unitario),
-                    data_saida || null,
-                    destino === null ? null : destino.trim()
-                ]
-            );
+            const saida = await Saida.create({
+                id_produto: Number(id_produto),
+                id_funcionario: Number(id_funcionario),
+                quantidade: Number(quantidade),
+                valor_unitario: Number(valor_unitario),
+                data_saida: data_saida || null,
+                destino: destino === null ? null : destino.trim()
+            }, { transaction });
+            return saida.id_saida;
         });
 
         return res.status(201).send({
             mensagem: 'Saída registrada com sucesso.',
-            id_saida: resultado.insertId
+            id_saida: resultado
         });
     } catch (error) {
         if (error.statusCode === 409) {

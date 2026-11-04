@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const mysql = require('../mysql');
+const { Categoria } = require('../models');
 
 const camposPermitidos = ['nome', 'descricao'];
 
@@ -8,194 +8,120 @@ function validarId(id) {
     return /^\d+$/.test(id) && Number(id) > 0;
 }
 
-// LISTAR CATEGORIAS ATIVAS
-router.get('/', (req, res) => {
-    mysql.getConnection((error, conn) => {
-        if (error) {
-            return res.status(500).send({ mensagem: 'Erro ao conectar ao banco de dados.' });
-        }
+function tratarErro(res, error, mensagem) {
+    console.error(mensagem, error);
+    return res.status(500).send({ mensagem });
+}
 
-        conn.query(
-            `SELECT id_categoria, nome, descricao, ativo
-             FROM categorias
-             WHERE ativo = 1`,
-            (error, resultado) => {
-                conn.release();
-
-                if (error) {
-                    console.error('Erro ao buscar categorias:', error);
-                    return res.status(500).send({ mensagem: 'Erro ao buscar categorias.' });
-                }
-
-                return res.status(200).send({ categorias: resultado });
-            }
-        );
-    });
+router.get('/', async (req, res) => {
+    try {
+        const categorias = await Categoria.findAll({
+            attributes: ['id_categoria', 'nome', 'descricao', 'ativo'],
+            where: { ativo: true },
+            raw: true
+        });
+        return res.status(200).send({ categorias });
+    } catch (error) {
+        return tratarErro(res, error, 'Erro ao buscar categorias.');
+    }
 });
 
-// BUSCAR CATEGORIA POR ID
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
     if (!validarId(req.params.id)) {
         return res.status(400).send({ mensagem: 'ID inválido.' });
     }
-
-    mysql.getConnection((error, conn) => {
-        if (error) {
-            return res.status(500).send({ mensagem: 'Erro ao conectar ao banco de dados.' });
+    try {
+        const categoria = await Categoria.findOne({
+            attributes: ['id_categoria', 'nome', 'descricao', 'ativo'],
+            where: { id_categoria: req.params.id, ativo: true },
+            raw: true
+        });
+        if (!categoria) {
+            return res.status(404).send({ mensagem: 'Categoria não encontrada.' });
         }
-
-        conn.query(
-            `SELECT id_categoria, nome, descricao, ativo
-             FROM categorias
-             WHERE id_categoria = ? AND ativo = 1`,
-            [req.params.id],
-            (error, resultado) => {
-                conn.release();
-
-                if (error) {
-                    console.error('Erro ao buscar categoria:', error);
-                    return res.status(500).send({ mensagem: 'Erro ao buscar categoria.' });
-                }
-
-                if (resultado.length === 0) {
-                    return res.status(404).send({ mensagem: 'Categoria não encontrada.' });
-                }
-
-                return res.status(200).send({ categoria: resultado[0] });
-            }
-        );
-    });
+        return res.status(200).send({ categoria });
+    } catch (error) {
+        return tratarErro(res, error, 'Erro ao buscar categoria.');
+    }
 });
 
-// CADASTRAR CATEGORIA
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
     const { nome, descricao = null } = req.body || {};
-
     if (typeof nome !== 'string' || !nome.trim()) {
         return res.status(400).send({ mensagem: 'Informe o nome da categoria.' });
     }
-
     if (descricao !== null && typeof descricao !== 'string') {
         return res.status(400).send({ mensagem: 'Descrição inválida.' });
     }
 
-    mysql.getConnection((error, conn) => {
-        if (error) {
-            return res.status(500).send({ mensagem: 'Erro ao conectar ao banco de dados.' });
-        }
-
-        conn.query(
-            `INSERT INTO categorias (nome, descricao, ativo)
-             VALUES (?, ?, 1)`,
-            [nome.trim(), descricao === null ? null : descricao.trim()],
-            (error, resultado) => {
-                conn.release();
-
-                if (error) {
-                    console.error('Erro ao cadastrar categoria:', error);
-                    return res.status(500).send({ mensagem: 'Erro ao cadastrar categoria.' });
-                }
-
-                return res.status(201).send({
-                    mensagem: 'Categoria cadastrada com sucesso.',
-                    id_categoria: resultado.insertId
-                });
-            }
-        );
-    });
+    try {
+        const categoria = await Categoria.create({
+            nome: nome.trim(),
+            descricao: descricao === null ? null : descricao.trim(),
+            ativo: true
+        });
+        return res.status(201).send({
+            mensagem: 'Categoria cadastrada com sucesso.',
+            id_categoria: categoria.id_categoria
+        });
+    } catch (error) {
+        return tratarErro(res, error, 'Erro ao cadastrar categoria.');
+    }
 });
 
-// ATUALIZAR CATEGORIA
-router.patch('/:id', (req, res) => {
+router.patch('/:id', async (req, res) => {
     if (!validarId(req.params.id)) {
         return res.status(400).send({ mensagem: 'ID inválido.' });
     }
-
     const body = req.body || {};
     const campos = camposPermitidos.filter(campo => body[campo] !== undefined);
-
-    if (campos.length === 0) {
+    if (!campos.length) {
         return res.status(400).send({
             mensagem: 'Informe ao menos um campo válido para atualizar.'
         });
     }
-
     if (body.nome !== undefined &&
         (typeof body.nome !== 'string' || !body.nome.trim())) {
         return res.status(400).send({ mensagem: 'Nome da categoria inválido.' });
     }
-
-    if (body.descricao !== undefined &&
-        body.descricao !== null &&
+    if (body.descricao !== undefined && body.descricao !== null &&
         typeof body.descricao !== 'string') {
         return res.status(400).send({ mensagem: 'Descrição inválida.' });
     }
 
-    const valores = campos.map(campo => {
-        const valor = body[campo];
-        return typeof valor === 'string' ? valor.trim() : valor;
-    });
-
-    const atualizacoes = campos.map(campo => `${campo} = ?`).join(', ');
-
-    mysql.getConnection((error, conn) => {
-        if (error) {
-            return res.status(500).send({ mensagem: 'Erro ao conectar ao banco de dados.' });
+    const atualizacoes = Object.fromEntries(campos.map(campo => [
+        campo,
+        typeof body[campo] === 'string' ? body[campo].trim() : body[campo]
+    ]));
+    try {
+        const [afetados] = await Categoria.update(atualizacoes, {
+            where: { id_categoria: req.params.id, ativo: true }
+        });
+        if (!afetados) {
+            return res.status(404).send({ mensagem: 'Categoria não encontrada.' });
         }
-
-        conn.query(
-            `UPDATE categorias
-             SET ${atualizacoes}
-             WHERE id_categoria = ? AND ativo = 1`,
-            [...valores, req.params.id],
-            (error, resultado) => {
-                conn.release();
-
-                if (error) {
-                    console.error('Erro ao atualizar categoria:', error);
-                    return res.status(500).send({ mensagem: 'Erro ao atualizar categoria.' });
-                }
-
-                if (resultado.affectedRows === 0) {
-                    return res.status(404).send({ mensagem: 'Categoria não encontrada.' });
-                }
-
-                return res.status(200).send({ mensagem: 'Categoria atualizada com sucesso.' });
-            }
-        );
-    });
+        return res.status(200).send({ mensagem: 'Categoria atualizada com sucesso.' });
+    } catch (error) {
+        return tratarErro(res, error, 'Erro ao atualizar categoria.');
+    }
 });
 
-// EXCLUIR CATEGORIA (EXCLUSÃO LÓGICA)
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
     if (!validarId(req.params.id)) {
         return res.status(400).send({ mensagem: 'ID inválido.' });
     }
-
-    mysql.getConnection((error, conn) => {
-        if (error) {
-            return res.status(500).send({ mensagem: 'Erro ao conectar ao banco de dados.' });
-        }
-
-        conn.query(
-            'UPDATE categorias SET ativo = 0 WHERE id_categoria = ? AND ativo = 1',
-            [req.params.id],
-            (error, resultado) => {
-                conn.release();
-
-                if (error) {
-                    console.error('Erro ao desativar categoria:', error);
-                    return res.status(500).send({ mensagem: 'Erro ao desativar categoria.' });
-                }
-
-                if (resultado.affectedRows === 0) {
-                    return res.status(404).send({ mensagem: 'Categoria não encontrada.' });
-                }
-
-                return res.status(200).send({ mensagem: 'Categoria desativada com sucesso.' });
-            }
+    try {
+        const [afetados] = await Categoria.update(
+            { ativo: false },
+            { where: { id_categoria: req.params.id, ativo: true } }
         );
-    });
+        if (!afetados) {
+            return res.status(404).send({ mensagem: 'Categoria não encontrada.' });
+        }
+        return res.status(200).send({ mensagem: 'Categoria desativada com sucesso.' });
+    } catch (error) {
+        return tratarErro(res, error, 'Erro ao desativar categoria.');
+    }
 });
 
 module.exports = router;

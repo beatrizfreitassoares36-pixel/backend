@@ -1,16 +1,18 @@
 const express = require('express');
 const router = express.Router();
-const { query, validarId, validarData, responderErro } = require('./helpers');
+const { Pedido, Cliente, PedidoItem, Produto } = require('../models');
+const { validarId, validarData, responderErro } = require('./helpers');
 
 router.get('/', async (req, res) => {
     try {
-        const pedidos = await query(
-            `SELECT p.id_pedido, p.status, p.data_pedido, p.id_cliente,
-                    c.nome AS cliente, p.criado_em, p.atualizado_em
-             FROM pedidos p
-             LEFT JOIN clientes c ON c.id_cliente = p.id_cliente
-             ORDER BY p.id_pedido DESC`
-        );
+        const registros = await Pedido.findAll({
+            attributes: ['id_pedido', 'status', 'data_pedido', 'id_cliente', 'criado_em', 'atualizado_em'],
+            include: [{ model: Cliente, as: 'cliente', attributes: ['nome'] }],
+            order: [['id_pedido', 'DESC']]
+        });
+        const pedidos = registros.map(registro => {
+            return { ...registro.toJSON(), cliente: registro.cliente?.nome ?? null };
+        });
         return res.status(200).send({ pedidos });
     } catch (error) {
         return responderErro(res, error, 'Erro ao buscar pedidos.');
@@ -23,27 +25,33 @@ router.get('/:id', async (req, res) => {
     }
 
     try {
-        const pedidos = await query(
-            `SELECT p.id_pedido, p.status, p.data_pedido, p.id_cliente,
-                    c.nome AS cliente, p.criado_em, p.atualizado_em
-             FROM pedidos p
-             LEFT JOIN clientes c ON c.id_cliente = p.id_cliente
-             WHERE p.id_pedido = ?`,
-            [req.params.id]
-        );
-        if (!pedidos.length) {
+        const registro = await Pedido.findByPk(req.params.id, {
+            attributes: ['id_pedido', 'status', 'data_pedido', 'id_cliente', 'criado_em', 'atualizado_em'],
+            include: [
+                { model: Cliente, as: 'cliente', attributes: ['nome'] },
+                {
+                    model: PedidoItem,
+                    as: 'itens',
+                    attributes: ['id_item', 'id_produto', 'quantidade', 'valor_unitario', 'subtotal'],
+                    include: [{ model: Produto, as: 'produtoInfo', attributes: ['nome'] }]
+                }
+            ],
+            order: [[{ model: PedidoItem, as: 'itens' }, 'id_item', 'ASC']]
+        });
+        if (!registro) {
             return res.status(404).send({ mensagem: 'Pedido não encontrado.' });
         }
-
-        const itens = await query(
-            `SELECT i.id_item, i.id_produto, p.nome AS produto, i.quantidade,
-                    i.valor_unitario, i.subtotal
-             FROM pedido_itens i
-             LEFT JOIN produtos p ON p.id_produto = i.id_produto
-             WHERE i.id_pedido = ? ORDER BY i.id_item`,
-            [req.params.id]
-        );
-        return res.status(200).send({ pedido: { ...pedidos[0], itens } });
+        const pedido = { ...registro.toJSON() };
+        pedido.cliente = registro.cliente?.nome ?? null;
+        pedido.itens = (registro.itens || []).map(registroItem => {
+            const item = {
+                ...registroItem.toJSON(),
+                produto: registroItem.produtoInfo?.nome ?? null
+            };
+            delete item.produtoInfo;
+            return item;
+        });
+        return res.status(200).send({ pedido });
     } catch (error) {
         return responderErro(res, error, 'Erro ao buscar pedido.');
     }
@@ -63,13 +71,14 @@ router.post('/', async (req, res) => {
     }
 
     try {
-        const resultado = await query(
-            'INSERT INTO pedidos (status, data_pedido, id_cliente) VALUES (?, ?, ?)',
-            [Number(status), data_pedido, id_cliente === null ? null : Number(id_cliente)]
-        );
+        const pedido = await Pedido.create({
+            status: Number(status),
+            data_pedido,
+            id_cliente: id_cliente === null ? null : Number(id_cliente)
+        });
         return res.status(201).send({
             mensagem: 'Pedido criado com sucesso.',
-            id_pedido: resultado.insertId
+            id_pedido: pedido.id_pedido
         });
     } catch (error) {
         return responderErro(res, error, 'Erro ao criar pedido.');
@@ -97,21 +106,22 @@ router.patch('/:id', async (req, res) => {
         !validarId(body.id_cliente)) {
         return res.status(400).send({ mensagem: 'ID do cliente inválido.' });
     }
-    const valores = campos.map(campo => {
-        if (campo === 'status') return Number(body[campo]);
-        if (campo === 'id_cliente' && body[campo] !== null) return Number(body[campo]);
-        return body[campo];
-    });
+    const atualizacoes = Object.fromEntries(campos.map(campo => {
+        const valor = campo === 'status'
+            ? Number(body[campo])
+            : campo === 'id_cliente' && body[campo] !== null
+                ? Number(body[campo])
+                : body[campo];
+        return [campo, valor];
+    }));
 
     try {
-        const resultado = await query(
-            `UPDATE pedidos SET ${campos.map(campo => `${campo} = ?`).join(', ')}
-             WHERE id_pedido = ?`,
-            [...valores, req.params.id]
-        );
-        if (!resultado.affectedRows) {
-            const exists = await query('SELECT id_pedido FROM pedidos WHERE id_pedido = ?', [req.params.id]);
-            if (!exists.length) {
+        const [afetados] = await Pedido.update(atualizacoes, {
+            where: { id_pedido: req.params.id }
+        });
+        if (!afetados) {
+            const existe = await Pedido.count({ where: { id_pedido: req.params.id } });
+            if (!existe) {
                 return res.status(404).send({ mensagem: 'Pedido não encontrado.' });
             }
         }

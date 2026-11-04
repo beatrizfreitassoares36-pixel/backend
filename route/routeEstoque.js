@@ -1,16 +1,20 @@
 const express = require('express');
 const router = express.Router();
-const { query, validarId, responderErro } = require('./helpers');
+const { Estoque, Produto } = require('../models');
+const { validarId, responderErro } = require('./helpers');
 
 router.get('/', async (req, res) => {
     try {
-        const estoque = await query(
-            `SELECT e.id_estoque, e.id_produto, p.nome AS produto,
-                    e.quantidade, e.estoque_minimo, e.estoque_maximo, e.localizacao
-             FROM estoque e
-             INNER JOIN produtos p ON p.id_produto = e.id_produto
-             ORDER BY p.nome`
-        );
+        const registros = await Estoque.findAll({
+            attributes: ['id_estoque', 'id_produto', 'quantidade', 'estoque_minimo', 'estoque_maximo', 'localizacao'],
+            include: [{ model: Produto, as: 'produtoInfo', attributes: ['nome'], required: true }],
+            order: [[{ model: Produto, as: 'produtoInfo' }, 'nome', 'ASC']]
+        });
+        const estoque = registros.map(registro => ({
+            ...registro.toJSON(),
+            produto: registro.produtoInfo?.nome
+        }));
+        for (const item of estoque) delete item.produtoInfo;
         return res.status(200).send({ estoque });
     } catch (error) {
         return responderErro(res, error, 'Erro ao buscar estoque.');
@@ -23,18 +27,17 @@ router.get('/:id', async (req, res) => {
     }
 
     try {
-        const resultado = await query(
-            `SELECT e.id_estoque, e.id_produto, p.nome AS produto,
-                    e.quantidade, e.estoque_minimo, e.estoque_maximo, e.localizacao
-             FROM estoque e
-             INNER JOIN produtos p ON p.id_produto = e.id_produto
-             WHERE e.id_produto = ?`,
-            [req.params.id]
-        );
-        if (!resultado.length) {
+        const registro = await Estoque.findOne({
+            attributes: ['id_estoque', 'id_produto', 'quantidade', 'estoque_minimo', 'estoque_maximo', 'localizacao'],
+            include: [{ model: Produto, as: 'produtoInfo', attributes: ['nome'], required: true }],
+            where: { id_produto: req.params.id }
+        });
+        if (!registro) {
             return res.status(404).send({ mensagem: 'Estoque do produto não encontrado.' });
         }
-        return res.status(200).send({ item: resultado[0] });
+        const item = { ...registro.toJSON(), produto: registro.produtoInfo?.nome };
+        delete item.produtoInfo;
+        return res.status(200).send({ item });
     } catch (error) {
         return responderErro(res, error, 'Erro ao buscar estoque.');
     }
@@ -64,12 +67,11 @@ router.patch('/:id', async (req, res) => {
     }
 
     try {
-        const resultado = await query(
-            `UPDATE estoque SET ${campos.map(campo => `${campo} = ?`).join(', ')}
-             WHERE id_produto = ?`,
-            [...campos.map(campo => body[campo]), req.params.id]
+        const [afetados] = await Estoque.update(
+            Object.fromEntries(campos.map(campo => [campo, body[campo]])),
+            { where: { id_produto: req.params.id } }
         );
-        if (!resultado.affectedRows) {
+        if (!afetados) {
             return res.status(404).send({ mensagem: 'Estoque do produto não encontrado.' });
         }
         return res.status(200).send({ mensagem: 'Estoque atualizado com sucesso.' });
