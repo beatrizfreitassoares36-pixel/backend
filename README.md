@@ -51,10 +51,11 @@ Requisitos: Node.js, npm e um servidor MySQL com o esquema da aplicação.
    DB_USER=seu_usuario
    DB_PASSWORD=sua_senha
    DB_NAME=nome_do_banco
+   JWT_SECRET=defina_um_segredo_aleatorio
    CORS_ORIGIN=http://localhost:3000
    ```
 
-   `PORT` e `DB_PORT` são opcionais (padrões: `5000` e `3306`). `CORS_ORIGIN` também é opcional; sem ele, a API aceita requisições de qualquer origem. Para permitir mais de uma origem, informe uma lista separada por vírgulas.
+   Gere um valor forte para `JWT_SECRET` com `node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"` e mantenha-o apenas no `.env` ou no ambiente de implantação; não o compartilhe nem o versione. Essa variável é obrigatória para o login. `PORT` e `DB_PORT` são opcionais (padrões: `5000` e `3306`). `CORS_ORIGIN` também é opcional; sem ele, a API aceita requisições de qualquer origem. Para permitir mais de uma origem, informe uma lista separada por vírgulas.
 
 3. Inicie a aplicação:
 
@@ -70,6 +71,41 @@ Requisitos: Node.js, npm e um servidor MySQL com o esquema da aplicação.
 
 A API escuta em `0.0.0.0`. O endereço local padrão é `http://localhost:5000`. O arquivo `beatrizfreitassoares_loja_oficial.sql` contém o esquema e dados de exemplo do banco.
 
+## Publicar no Render
+
+O arquivo `render.yaml` configura um serviço Web Node no plano gratuito, instala apenas dependências de produção, inicia a API com `npm start` e usa `GET /teste` como verificação de saúde.
+
+1. Envie este repositório ao GitHub e, no Render, crie um **Blueprint** conectado ao repositório que contém `render.yaml`.
+2. No serviço, informe `DB_HOST`, `DB_USER`, `DB_PASSWORD` e `DB_NAME` do MySQL hospedado. `DB_PORT` está definido como `3306`; altere-o no painel se o provedor usar outra porta.
+3. Gere uma `JWT_SECRET` forte e configure-a como variável secreta no Render. Não coloque senhas ou segredos no repositório nem compartilhe o `.env`.
+4. Se o banco restringir conexões por IP, permita as conexões de saída do Render conforme o plano e a documentação do provedor. Se o provedor do MySQL exigir TLS, confirme a compatibilidade antes de publicar; a configuração atual do pool não habilita TLS.
+5. O build do Blueprint compila o frontend e o mesmo serviço entrega a interface e a API pela mesma origem. Após o deploy, confira `https://<serviço>.onrender.com/teste` e abra `https://<serviço>.onrender.com`. O plano gratuito pode suspender o serviço quando estiver ocioso e causar demora na primeira requisição.
+
+O serviço precisa ser conectado ao repositório no painel do Render para publicar e fazer deploy automático dos commits. Variáveis com `sync: false` são solicitadas/configuradas fora do YAML e não armazenam credenciais no Git.
+
+## Frontend
+
+O painel React/Vite fica na pasta `frontend/` e consome os endpoints documentados acima.
+
+1. Inicie o backend em um terminal, na raiz do repositório:
+
+   ```bash
+   npm install
+   npm run dev
+   ```
+
+2. Em outro terminal, instale e inicie o frontend:
+
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+
+   Abra o endereço local mostrado pelo Vite (normalmente `http://localhost:5173`). Sem `VITE_API_URL`, o proxy de desenvolvimento encaminha as rotas da API para `http://localhost:5000`. Para outra URL, defina `VITE_API_URL` no ambiente de build do frontend; em hospedagem separada, permita a origem do frontend em `CORS_ORIGIN` no backend.
+
+O frontend inclui login, dashboard e telas de consulta, cadastro, edição e remoção conforme as operações existentes em cada módulo. O backend atualmente não valida o JWT nas demais rotas; a tela exibe esse aviso, e o login não deve ser considerado uma barreira de autorização da API.
+
 ## Convenções
 
 - Os caminhos abaixo são relativos à origem da API; não há prefixo `/api`.
@@ -78,7 +114,7 @@ A API escuta em `0.0.0.0`. O endereço local padrão é `http://localhost:5000`.
 - IDs devem ser inteiros positivos.
 - Listas são retornadas dentro de uma propriedade com o nome indicado na tabela; consultas por ID retornam o objeto correspondente. As respostas também podem conter `mensagem`.
 - Campos não indicados para `PATCH` não são atualizados. Campos omitidos em `PATCH` permanecem inalterados; alguns campos opcionais aceitam `null`, conforme descrito abaixo.
-- Não há paginação, filtros de listagem ou autenticação implementados nas rotas documentadas.
+- Não há paginação ou filtros de listagem. `POST /usuario/login` e `GET /teste` são públicos; todas as demais rotas exigem `Authorization: Bearer <token>` com um JWT válido emitido pelo login.
 - Erros de validação retornam HTTP `400`; registros ausentes, `404`; conflitos, `409`; erros internos, `500`. Em geral, as rotas retornam `{ "mensagem": "..." }`. Erros tratados pelo middleware global retornam `{ "erro": { "mensagem": "..." } }`.
 
 ## Verificação
@@ -91,11 +127,14 @@ A API escuta em `0.0.0.0`. O endereço local padrão é `http://localhost:5000`.
 
 | Método e caminho | Descrição | Corpo / resposta |
 |---|---|---|
+| `POST /usuario/login` | Autentica um usuário ativo. | Obrigatórios: `email` válido e `senha`. Retorna `token` JWT válido por 8 horas e os campos públicos do usuário (`id_usuario`, `nome`, `email`). Credenciais inválidas retornam `401`; dados inválidos, `400`; `JWT_SECRET` ausente, `500`. |
 | `GET /usuario` | Lista usuários ativos. | Resposta: `{ "usuarios": [...] }`; a senha nunca é retornada. |
 | `GET /usuario/:id` | Busca usuário ativo pelo ID. | Resposta: `{ "usuario": {...} }`. |
 | `POST /usuario` | Cadastra usuário. | Obrigatórios: `nome`, `email`, `senha` (mínimo 8 caracteres). Opcionais: `contato`, `genero` (texto ou `null`). A senha é armazenada como hash. Retorna `id_usuario`. |
 | `PATCH /usuario/:id` | Atualiza usuário ativo. | Aceita `nome`, `email`, `senha`, `contato`, `genero`. A senha, se enviada, também precisa ter ao menos 8 caracteres e é armazenada como hash. |
 | `DELETE /usuario/:id` | Desativa usuário (exclusão lógica). | — |
+
+Envie `Authorization: Bearer <token>` nas chamadas às demais rotas. O frontend armazena o token apenas na sessão atual do navegador e o inclui nas requisições automaticamente.
 
 ### Funcionários — `/funcionario`
 

@@ -1,5 +1,10 @@
 # dependencies
 /node_modules
+frontend/node_modules
+frontend/dist
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
 /.pnp
 .pnp.js
 # testing

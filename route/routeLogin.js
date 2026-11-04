@@ -1,9 +1,15 @@
-// ...existing code...
+const express = require('express');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { query, responderErro } = require('./helpers');
 
-// ...existing code...
+const router = express.Router();
 
-// LOGIN
+function emailValido(email) {
+    return typeof email === 'string' &&
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
 router.post('/login', async (req, res) => {
     const { email, senha } = req.body || {};
 
@@ -19,7 +25,7 @@ router.post('/login', async (req, res) => {
     }
 
     try {
-        const resultado = await consultar(
+        const resultado = await query(
             `SELECT id_usu, nome, email, senha
              FROM usuarios
              WHERE email = ? AND ativo = 1
@@ -58,4 +64,4 @@ router.post('/login', async (req, res) => {
     }
 });
 
-// ...existing code...
+module.exports = router;
