@@ -39,7 +39,7 @@ O Sequelize é usado para executar consultas e operações de persistência por 
 
 ## Executar
 
-Requisitos: Node.js, npm e uma instância MySQL com o schema da aplicação já provisionado.
+Requisitos: Node.js, npm e uma instância MySQL com o schema da aplicação já provisionado. Este repositório não contém o DDL completo do banco; solicite o schema aprovado ao responsável pelo banco antes de configurar um ambiente novo. Não use nem publique dumps locais com dados de exemplo ou credenciais.
 
 1. Clone o repositório, acesse a pasta do projeto e instale as dependências:
 
@@ -72,7 +72,15 @@ Requisitos: Node.js, npm e uma instância MySQL com o schema da aplicação já 
    npm run db:check
    ```
 
-4. Inicie a API:
+4. Execute a suíte automatizada:
+
+   ```bash
+   npm test
+   ```
+
+   Os testes de unidade e de rotas usam dados simulados e não criam nem alteram registros no MySQL. `npm run db:check` valida separadamente a conectividade com o banco configurado.
+
+5. Inicie a API:
 
    ```bash
    npm start
@@ -177,6 +185,24 @@ Os endpoints recebem corpos JSON (`Content-Type: application/json`). Campos e ex
 ## Verificação
 
 `GET /teste` retorna HTTP `200` e `{ "mensagem": "Tudo OK" }`.
+
+Verifique a instância local ou publicada com:
+
+```bash
+curl -i https://backend-1-puom.onrender.com/teste
+```
+
+Para testar localmente, substitua a URL por `http://localhost:5000/teste`. A resposta esperada inclui status `200` e o JSON `{ "mensagem": "Tudo OK" }`.
+
+### Executar os testes automatizados
+
+Na raiz do repositório, após `npm install`, execute:
+
+```bash
+npm test
+```
+
+O comando usa o test runner integrado do Node.js (`node --test`) para verificar validações, autorização, endpoint de saúde e login (incluindo credenciais inválidas e configuração ausente). Os testes de login substituem o acesso ao modelo, portanto não precisam de conexão MySQL. Para verificar separadamente o banco real configurado no `.env`, execute `npm run db:check`.
 
 ## Endpoints
 
@@ -314,11 +340,12 @@ Envie `Authorization: Bearer <JWT>` nas chamadas às demais rotas.
 
 ```bash
 curl -X POST http://localhost:5000/categorias \
+  -H "Authorization: Bearer <JWT>" \
   -H "Content-Type: application/json" \
   -d "{\"nome\":\"Bebidas\",\"descricao\":\"Bebidas e sucos\"}"
 ```
 
-Exemplo de resposta (`201 Created`):
+Exemplo de resposta (`201 Created`; é necessário substituir `<JWT>` por um token válido):
 
 ```json
 {
