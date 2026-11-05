@@ -1,10 +1,12 @@
-# API de Gerenciamento de Loja
+# API de Gestão Comercial
 
-## Nome, objetivo e problema resolvido
+## Objetivo e problema resolvido
 
-**API de Gerenciamento de Loja** centraliza as operações de uma loja em endpoints REST: usuários, funcionários, clientes, fornecedores, categorias, produtos, estoque, entradas e saídas, pedidos, movimentações, histórico de preços e logs.
+Esta API fornece operações REST para o gerenciamento de uma loja: produtos, categorias, estoque, entradas e saídas, clientes, fornecedores, funcionários, pedidos e registros relacionados.
 
-Ela resolve a fragmentação de registros e o controle manual dessas atividades, oferecendo uma interface única para cadastrar, consultar, atualizar e, quando disponível, remover dados, além de manter o estoque atualizado e proteger as operações por autenticação.
+Ela resolve a fragmentação de informações e de tarefas operacionais ao centralizar cadastro, consulta e atualização dos dados comerciais em um backend integrado a um banco MySQL.
+
+Este repositório entrega somente o backend/API; a interface frontend não faz parte do serviço documentado aqui.
 
 ## Funcionalidades da API
 
@@ -22,48 +24,55 @@ A API oferece suporte às principais operações de gestão de uma loja, incluin
 
 Além disso, a API segue uma estrutura REST com rotas dedicadas para cada módulo, permitindo fácil integração com frontend, apps mobile ou outros sistemas.
 
-## Tecnologias
+## Tecnologias do backend
 
-- Node.js e Express 5 para o servidor HTTP e as rotas REST.
-- Sequelize 6 como ORM: mapeia as tabelas MySQL a modelos e executa operações de persistência; transações são usadas em operações que precisam de atomicidade.
-- MySQL como banco de dados, acessado pelo driver `mysql2`.
-- `jsonwebtoken` para emitir e validar tokens JWT; `bcryptjs` para armazenar senhas como hashes e verificá-las no login.
-- `dotenv` para carregar configuração local e `cors` para configurar origens permitidas.
+- Node.js e Express 5: servidor HTTP e rotas REST.
+- Sequelize 6 e `mysql2`: ORM e driver usados para mapear tabelas e persistir dados no MySQL.
+- MySQL: banco relacional da aplicação.
+- `jsonwebtoken`: emissão e validação de tokens JWT.
+- `bcryptjs`: hash de senhas e verificação de credenciais.
+- `dotenv`: leitura de variáveis de ambiente.
+- `cors`: configuração de origens que podem chamar a API.
+- Morgan: registro das requisições HTTP.
+
+O Sequelize é usado para executar consultas e operações de persistência por modelos mapeados ao schema existente. Também permite executar operações atômicas em transações, como o registro de saídas de estoque. Os modelos não alteram o schema automaticamente.
 
 ## Executar
 
-Requisitos: Node.js, npm e um servidor MySQL com o esquema da aplicação já criado. Os modelos em `models/index.js` mapeiam o schema existente; o servidor não cria nem altera tabelas automaticamente. O schema deve ser provisionado e administrado no seu ambiente.
+Requisitos: Node.js, npm e uma instância MySQL com o schema da aplicação já provisionado.
 
-1. Instale as dependências:
+1. Clone o repositório, acesse a pasta do projeto e instale as dependências:
 
    ```bash
+   git clone https://github.com/beatrizfreitassoares36-pixel/backend.git
+   cd backend
    npm install
    ```
 
-2. Configure um arquivo `.env` na raiz:
+2. Crie um `.env` local na raiz. Use os nomes abaixo e preencha os valores apenas no seu ambiente:
 
    ```env
    PORT=5000
-   DB_HOST=localhost
+   DB_HOST=<host-do-mysql>
    DB_PORT=3306
-   DB_USER=<usuario-do-banco>
-   DB_PASSWORD=<senha-do-banco>
+   DB_USER=<usuario-do-mysql>
+   DB_PASSWORD=<senha-do-mysql>
    DB_NAME=<nome-do-banco>
    JWT_SECRET=<segredo-aleatorio-forte>
-   CORS_ORIGIN=http://localhost:5173
+   CORS_ORIGIN=<origem-autorizada>
    ```
 
-   `DB_HOST`, `DB_USER`, `DB_NAME` e `JWT_SECRET` são obrigatórias. `DB_PASSWORD` deve conter a senha do banco quando aplicável. `PORT` e `DB_PORT` são opcionais (padrões: `5000` e `3306`). `CORS_ORIGIN` é opcional; sem ela, a API permite qualquer origem. Para restringir ou permitir várias origens, informe uma origem ou uma lista separada por vírgulas.
+   `DB_HOST`, `DB_USER`, `DB_NAME` e `JWT_SECRET` são necessários. Informe `DB_PASSWORD` quando o MySQL exigir senha. `PORT` é opcional (padrão `5000`); `DB_PORT` é opcional (padrão `3306`). `CORS_ORIGIN` é opcional; sem ela, o servidor aceita chamadas de qualquer origem. Para restringir ou permitir várias origens, informe a(s) origem(ns), separadas por vírgulas.
 
-   Gere `JWT_SECRET` com `node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"`. Use valores reais somente em `.env` local ou no gerenciador de variáveis secretas do host. Não coloque senhas, tokens ou segredos em arquivos do Git.
+   Gere um `JWT_SECRET` forte localmente, por exemplo com `node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"`. Nunca coloque valores reais de senha, tokens ou segredos neste README, no `.env.example` ou em arquivos públicos do GitHub. O `.env` está no `.gitignore`.
 
-3. (Opcional) valide a conexão Sequelize com o MySQL:
+3. Confira a conexão com o banco:
 
    ```bash
    npm run db:check
    ```
 
-4. Inicie a aplicação:
+4. Inicie a API:
 
    ```bash
    npm start
@@ -75,29 +84,33 @@ Requisitos: Node.js, npm e um servidor MySQL com o esquema da aplicação já cr
    npm run dev
    ```
 
-A API escuta em `0.0.0.0`. O endereço local padrão é `http://localhost:5000`.
+A API escuta em `0.0.0.0`. O endereço local padrão é `http://localhost:5000`. O projeto não executa `sequelize.sync()` nem cria/altera tabelas automaticamente; provisione o schema por meio de DDL/migrações revisadas e adequadas ao ambiente. Não publique dumps de banco ou dados reais.
 
 ## Publicar no Render
 
-O arquivo `render.yaml` configura um serviço Web Node no plano gratuito, instala apenas dependências de produção, inicia a API com `npm start` e usa `GET /teste` como verificação de saúde.
+O arquivo `render.yaml` configura um serviço Web Node no plano gratuito, instala as dependências do backend, executa os testes, inicia a API com `npm start` e usa `GET /teste` como verificação de saúde.
 
 1. Envie este repositório ao GitHub e, no Render, crie um **Blueprint** conectado ao repositório que contém `render.yaml`.
 2. No serviço, informe `DB_HOST`, `DB_USER`, `DB_PASSWORD` e `DB_NAME` do MySQL hospedado. `DB_PORT` está definido como `3306`; altere-o no painel se o provedor usar outra porta.
 3. Gere uma `JWT_SECRET` forte e configure-a como variável secreta no Render. Não coloque senhas ou segredos no repositório nem compartilhe o `.env`.
 4. Se o banco restringir conexões por IP, permita as conexões de saída do Render conforme o plano e a documentação do provedor. Se o provedor do MySQL exigir TLS, confirme a compatibilidade antes de publicar; a configuração atual do pool não habilita TLS.
-5. O build do Blueprint compila o frontend e o mesmo serviço entrega a interface e a API pela mesma origem. Depois de criar o serviço e concluir o deploy, copie o domínio público exibido pelo Render e atualize a seção [Endereço público](#endereço-público-da-api). Verifique `<URL-PUBLICA>/teste`; o plano gratuito pode suspender o serviço quando estiver ocioso e causar demora na primeira requisição.
+5. Após o deploy, copie o domínio atribuído ao serviço no painel do Render e registre-o abaixo. Verifique `GET https://<serviço>.onrender.com/teste`. O plano gratuito pode suspender o serviço quando estiver ocioso e causar demora na primeira requisição.
 
 O serviço precisa ser conectado ao repositório no painel do Render para publicar e fazer deploy automático dos commits. Variáveis com `sync: false` são solicitadas/configuradas fora do YAML e não armazenam credenciais no Git.
 
-## Endereço público da API
+### Endereço público
 
-O repositório contém a configuração para hospedagem no Render, mas não há um domínio público de produção registrado nesta documentação. O arquivo `render.yaml` não publica o serviço sozinho: é necessário criar o Blueprint no Render, configurar as variáveis secretas e concluir o deploy. Após a publicação, substitua este aviso pela URL real, por exemplo `https://<dominio-do-servico>.onrender.com`; a verificação de saúde ficará em `<URL-PUBLICA>/teste`.
+**Status neste repositório:** não há um domínio de serviço Render confirmado/documentado. `render.yaml` configura a implantação, mas não prova que o serviço já foi criado ou publicado. Após concluir o deploy, substitua este marcador pelo domínio exibido no painel:
+
+- URL base: `https://<serviço>.onrender.com`
+- Verificação de saúde: `https://<serviço>.onrender.com/teste`
+- Login: `https://<serviço>.onrender.com/usuario/login`
 
 ## ORM e camada de dados
 
-O projeto configura uma instância Sequelize 6 em `sequelize.js` e define os modelos MySQL em `models/index.js`. As rotas usam os modelos Sequelize para consultas, inserções, atualizações e exclusões; operações que exigem atomicidade, como registrar saídas e atualizar o estoque, usam transações Sequelize. O pool está limitado a 10 conexões e o logging SQL fica desativado.
+O projeto configura uma instância Sequelize 6 em `sequelize.js` e define os modelos das tabelas MySQL em `models/index.js`. As rotas usam o ORM para consultas, inserções, atualizações e exclusões; operações que exigem atomicidade, como registrar saídas e atualizar o estoque, usam transações Sequelize. O pool está limitado a 10 conexões e o logging SQL fica desativado.
 
-Os modelos mapeiam as tabelas existentes e não sincronizam nem alteram o schema automaticamente. Provisione e atualize o schema conforme o DDL aprovado para seu ambiente; não execute `sync({ alter: true })` em produção.
+Os modelos mapeiam as tabelas existentes e não sincronizam nem alteram o schema automaticamente. Crie ou atualize o banco por meio das migrações/DDL administradas pelo projeto; não execute `sync({ alter: true })` em produção.
 
 Valide as credenciais e a conectividade com uma consulta somente de leitura:
 
@@ -107,28 +120,48 @@ npm run db:check
 
 O comando tenta autenticar, executa `SELECT 1` e encerra a conexão sem modificar dados.
 
-## Frontend
+## Cadastro e autenticação
 
-O painel React/Vite fica na pasta `frontend/` e consome os endpoints documentados acima.
+O endpoint de cadastro `POST /usuario` é protegido, assim como as demais rotas de dados. Portanto, para cadastrar usuários pela API, é necessário já possuir um token válido. O projeto não oferece uma rota pública nem um usuário inicial padrão: a primeira conta deve ser provisionada pelo responsável pelo banco em um processo administrativo seguro, armazenando a senha como hash bcrypt. Não remova a proteção da rota nem coloque credenciais no código ou em arquivos públicos.
 
-1. Inicie o backend em um terminal, na raiz do repositório:
-
-   ```bash
-   npm install
-   npm run dev
-   ```
-
-2. Em outro terminal, instale e inicie o frontend:
+1. Envie `POST /usuario` com JSON e um token administrativo já válido:
 
    ```bash
-   cd frontend
-   npm install
-   npm run dev
+   curl -X POST http://localhost:5000/usuario \
+     -H "Content-Type: application/json" \
+     -H "Authorization: Bearer <JWT>" \
+     -d "{\"nome\":\"Novo usuário\",\"email\":\"usuario@example.com\",\"senha\":\"<senha-forte>\"}"
    ```
 
-   Abra o endereço local mostrado pelo Vite (normalmente `http://localhost:5173`). Sem `VITE_API_URL`, o proxy de desenvolvimento encaminha as rotas da API para `http://localhost:5000`. Para outra URL, defina `VITE_API_URL` no ambiente de build do frontend; em hospedagem separada, permita a origem do frontend em `CORS_ORIGIN` no backend.
+   Campos obrigatórios: `nome`, `email` válido e `senha` com pelo menos 8 caracteres. `contato` e `genero` são opcionais. A API armazena a senha usando bcrypt e responde com `201 Created` e `id_usuario`, sem retornar a senha.
 
-O frontend inclui login, dashboard e telas para operações disponíveis nos módulos. A API valida o JWT no servidor: somente `POST /usuario/login` e `GET /teste` são públicos; todas as demais rotas exigem autenticação.
+2. Autentique o usuário com `POST /usuario/login` (não requer token):
+
+   ```bash
+   curl -X POST http://localhost:5000/usuario/login \
+     -H "Content-Type: application/json" \
+     -d "{\"email\":\"usuario@example.com\",\"senha\":\"<senha-informada-no-cadastro>\"}"
+   ```
+
+   Em caso de sucesso, a resposta `200 OK` tem a forma abaixo:
+
+   ```json
+   {
+     "mensagem": "Login realizado com sucesso.",
+     "token": "<JWT>",
+     "usuario": {
+       "id_usuario": 1,
+       "nome": "Novo usuário",
+       "email": "usuario@example.com"
+     }
+   }
+   ```
+
+   Envie o token nas rotas protegidas usando `Authorization: Bearer <JWT>`. O token expira em 8 horas. Login inválido retorna `401`; JSON/credenciais malformados retornam `400`. A implementação valida assinatura e expiração do token, mas não possui papéis/permissões por usuário: qualquer conta autenticada pode chamar as rotas protegidas.
+
+## Formato das requisições e respostas
+
+Os endpoints recebem corpos JSON (`Content-Type: application/json`). Campos e exemplos específicos por operação estão nas tabelas de endpoints abaixo. Datas de calendário usam `YYYY-MM-DD`; IDs são inteiros positivos. Respostas de criação normalmente incluem `mensagem` e o identificador gerado; consultas de listas e registros usam as propriedades indicadas nas tabelas. Senhas não são devolvidas pelas rotas de usuário.
 
 ## Convenções
 
@@ -154,57 +187,11 @@ O frontend inclui login, dashboard e telas para operações disponíveis nos mó
 | `POST /usuario/login` | Autentica um usuário ativo. | Obrigatórios: `email` válido e `senha`. Retorna `token` JWT válido por 8 horas e os campos públicos do usuário (`id_usuario`, `nome`, `email`). Credenciais inválidas retornam `401`; dados inválidos, `400`; `JWT_SECRET` ausente, `500`. |
 | `GET /usuario` | Lista usuários ativos. | Resposta: `{ "usuarios": [...] }`; a senha nunca é retornada. |
 | `GET /usuario/:id` | Busca usuário ativo pelo ID. | Resposta: `{ "usuario": {...} }`. |
-| `POST /usuario` | Cadastra usuário. Esta rota exige autenticação. | Obrigatórios: `nome`, `email`, `senha` (mínimo 8 caracteres). Opcionais: `contato`, `genero` (texto ou `null`). A senha é armazenada como hash bcrypt, nunca em texto puro. Retorna `id_usuario`. |
+| `POST /usuario` | Cadastra usuário. | Obrigatórios: `nome`, `email`, `senha` (mínimo 8 caracteres). Opcionais: `contato`, `genero` (texto ou `null`). A senha é armazenada como hash. Retorna `id_usuario`. |
 | `PATCH /usuario/:id` | Atualiza usuário ativo. | Aceita `nome`, `email`, `senha`, `contato`, `genero`. A senha, se enviada, também precisa ter ao menos 8 caracteres e é armazenada como hash. |
 | `DELETE /usuario/:id` | Desativa usuário (exclusão lógica). | — |
 
-Envie `Authorization: Bearer <token>` nas chamadas às demais rotas. O frontend armazena o token apenas na sessão atual do navegador e o inclui nas requisições automaticamente.
-
-#### Cadastrar usuário e testar login
-
-O cadastro de usuários é protegido. Portanto, o primeiro usuário ativo deve ser provisionado por um administrador usando um processo seguro de inicialização do banco, armazenando a senha como hash bcrypt; não há cadastro público aberto sem autenticação. Depois que houver um usuário ativo, autentique-se e use o token para cadastrar outros usuários.
-
-Exemplo de cadastro (substitua os valores indicados e use um token válido):
-
-```bash
-curl -X POST http://localhost:5000/usuario \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <JWT-VALIDO>" \
-  -d '{"nome":"Novo usuário","email":"usuario@example.com","senha":"<SENHA-FORTE>"}'
-```
-
-O cadastro responde `201 Created`, por exemplo:
-
-```json
-{
-  "mensagem": "Usuário criado com sucesso.",
-  "id_usuario": 123
-}
-```
-
-Teste o login enviando email e senha em JSON. Esta rota é pública e não exige token:
-
-```bash
-curl -X POST http://localhost:5000/usuario/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"usuario@example.com","senha":"<SENHA-FORTE>"}'
-```
-
-Com credenciais válidas, a resposta é `200 OK` e contém a mensagem, um JWT com validade de 8 horas e os dados públicos do usuário:
-
-```json
-{
-  "mensagem": "Login realizado com sucesso.",
-  "token": "<JWT-RETORNADO>",
-  "usuario": {
-    "id_usuario": 123,
-    "nome": "Novo usuário",
-    "email": "usuario@example.com"
-  }
-}
-```
-
-Para testar uma rota protegida, envie o token retornado em `Authorization: Bearer <JWT-RETORNADO>`. Não inclua senhas reais, hashes de senhas, tokens ou outras credenciais em arquivos do repositório; guarde segredos apenas em variáveis de ambiente ou no gerenciador secreto do provedor de hospedagem.
+Envie `Authorization: Bearer <JWT>` nas chamadas às demais rotas.
 
 ### Funcionários — `/funcionario`
 
@@ -327,7 +314,6 @@ Para testar uma rota protegida, envie o token retornado em `Authorization: Beare
 
 ```bash
 curl -X POST http://localhost:5000/categorias \
-  -H "Authorization: Bearer <JWT-VALIDO>" \
   -H "Content-Type: application/json" \
   -d "{\"nome\":\"Bebidas\",\"descricao\":\"Bebidas e sucos\"}"
 ```

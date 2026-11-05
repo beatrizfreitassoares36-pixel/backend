@@ -3,7 +3,7 @@ services:
     name: backend
     runtime: node
     plan: free
-    buildCommand: npm ci --omit=dev && npm ci --prefix frontend && npm run build --prefix frontend && npm test
+    buildCommand: npm ci --omit=dev && npm test
     startCommand: npm start
     healthCheckPath: /teste
     envVars:
