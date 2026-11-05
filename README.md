@@ -94,17 +94,17 @@ O arquivo `render.yaml` configura um serviço Web Node no plano gratuito, instal
 2. No serviço, informe `DB_HOST`, `DB_USER`, `DB_PASSWORD` e `DB_NAME` do MySQL hospedado. `DB_PORT` está definido como `3306`; altere-o no painel se o provedor usar outra porta.
 3. Gere uma `JWT_SECRET` forte e configure-a como variável secreta no Render. Não coloque senhas ou segredos no repositório nem compartilhe o `.env`.
 4. Se o banco restringir conexões por IP, permita as conexões de saída do Render conforme o plano e a documentação do provedor. Se o provedor do MySQL exigir TLS, confirme a compatibilidade antes de publicar; a configuração atual do pool não habilita TLS.
-5. Após o deploy, copie o domínio atribuído ao serviço no painel do Render e registre-o abaixo. Verifique `GET https://<serviço>.onrender.com/teste`. O plano gratuito pode suspender o serviço quando estiver ocioso e causar demora na primeira requisição.
+5. O serviço implantado está disponível em `https://backend-1-puom.onrender.com`. Verifique `GET https://backend-1-puom.onrender.com/teste`. O plano gratuito pode suspender o serviço quando estiver ocioso e causar demora na primeira requisição.
 
 O serviço precisa ser conectado ao repositório no painel do Render para publicar e fazer deploy automático dos commits. Variáveis com `sync: false` são solicitadas/configuradas fora do YAML e não armazenam credenciais no Git.
 
 ### Endereço público
 
-**Status neste repositório:** não há um domínio de serviço Render confirmado/documentado. `render.yaml` configura a implantação, mas não prova que o serviço já foi criado ou publicado. Após concluir o deploy, substitua este marcador pelo domínio exibido no painel:
+O serviço Render foi criado e sua URL pública foi verificada com sucesso:
 
-- URL base: `https://<serviço>.onrender.com`
-- Verificação de saúde: `https://<serviço>.onrender.com/teste`
-- Login: `https://<serviço>.onrender.com/usuario/login`
+- URL base: `https://backend-1-puom.onrender.com`
+- Verificação de saúde: `https://backend-1-puom.onrender.com/teste`
+- Login: `https://backend-1-puom.onrender.com/usuario/login`
 
 ## ORM e camada de dados
 
