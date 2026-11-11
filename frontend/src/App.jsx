@@ -1,149 +1,38 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Activity, ArrowDownToLine, ArrowLeft, ArrowUpFromLine, Boxes, BriefcaseBusiness,
-  ChartNoAxesCombined, ChevronDown, CircleAlert, ContactRound, Eye, EyeOff, FileText,
-  LayoutDashboard, ListOrdered, LogOut, Menu, Package, Plus, RefreshCw, Search,
-  ScrollText, ShoppingBag, Tag, Truck, Users, X
-} from 'lucide-react';
-import { apiRequest } from './api.js';
+import { useEffect, useMemo, useState } from 'react';
+import { apiRequest, getToken } from './api.js';
 import { modules } from './modules.js';
 
-const iconMap = {
-  activity: Activity,
-  'arrow-down-to-line': ArrowDownToLine,
-  'arrow-up-from-line': ArrowUpFromLine,
-  boxes: Boxes,
-  briefcase: BriefcaseBusiness,
-  'chart-no-axes-combined': ChartNoAxesCombined,
-  contact: ContactRound,
-  package: Package,
-  'list-ordered': ListOrdered,
-  'shopping-bag': ShoppingBag,
-  'scroll-text': ScrollText,
-  tag: Tag,
-  truck: Truck,
-  users: Users
-};
+const API_URL = import.meta.env.VITE_API_BASE_URL || 'proxy local → API publicada';
 
-function readSavedSession() {
-  try {
-    const user = sessionStorage.getItem('loja-user');
-    const token = sessionStorage.getItem('loja-token');
-    return user && token ? { user: JSON.parse(user), token } : null;
-  } catch {
-    sessionStorage.removeItem('loja-user');
-    sessionStorage.removeItem('loja-token');
-    return null;
-  }
+function getErrorMessage(error) {
+  return error instanceof Error ? error.message : 'Ocorreu um erro inesperado.';
 }
 
-function formatLabel(key) {
-  return key
-    .replace(/_/g, ' ')
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/\b\w/g, character => character.toUpperCase());
-}
-
-function formatValue(value, key = '') {
+function formatValue(value, key) {
   if (value === null || value === undefined || value === '') return '—';
   if (key === 'status') return Number(value) === 1 ? 'Ativo' : 'Inativo';
-  if (key === 'preco' || key === 'salario' || key === 'subtotal' || key === 'valor_unitario') {
-    const number = Number(value);
-    return Number.isFinite(number)
-      ? number.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-      : String(value);
-  }
   if (typeof value === 'boolean') return value ? 'Sim' : 'Não';
-  if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
-}
-
-function inputValue(value, field) {
-  if (value === null || value === undefined) return '';
-  if (field.type === 'date' && typeof value === 'string') return value.slice(0, 10);
-  if (field.inputType === 'datetime-local' && typeof value === 'string') {
-    return value.replace(' ', 'T').slice(0, 16);
+  if (typeof value === 'number' && /preco|salario|valor|subtotal/i.test(key)) {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   }
   return String(value);
 }
 
-function buildPayload(formData, fields) {
-  const payload = {};
-  for (const field of fields) {
-    const value = formData.get(field.name);
-    if (value === '') {
-      if (field.nullable) payload[field.name] = null;
-      continue;
-    }
-    if (field.type === 'number' || (field.type === 'select' && field.name === 'status')) {
-      payload[field.name] = Number(value);
-    } else if (field.inputType === 'datetime-local') {
-      payload[field.name] = value.replace('T', ' ');
-    } else {
-      payload[field.name] = value;
-    }
-  }
-  return payload;
-}
-
-function Field({ field, value }) {
-  const common = {
-    id: `field-${field.name}`,
-    name: field.name,
-    required: Boolean(field.required),
-    defaultValue: value,
-    min: field.min,
-    step: field.step,
-    minLength: field.minLength,
-    autoComplete: field.inputType === 'password' ? 'new-password' : undefined
-  };
-  return (
-    <label className={field.multiline ? 'form-field form-field-wide' : 'form-field'} htmlFor={common.id}>
-      <span>{field.label}{field.required && <i aria-hidden="true"> *</i>}</span>
-      {field.multiline
-        ? <textarea {...common} rows="3" />
-        : field.type === 'select'
-          ? (
-            <select {...common}>
-              <option value="">Selecione</option>
-              {field.options.map(option => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          )
-          : <input {...common} type={field.inputType || field.type} />}
-    </label>
-  );
-}
-
-function Login({ onLogin }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [passwordVisible, setPasswordVisible] = useState(false);
+function Login({ onLogin, message, setMessage }) {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [apiStatus, setApiStatus] = useState('checking');
-
-  useEffect(() => {
-    let active = true;
-    apiRequest('/teste')
-      .then(() => { if (active) setApiStatus('online'); })
-      .catch(() => { if (active) setApiStatus('offline'); });
-    return () => { active = false; };
-  }, []);
 
   async function submit(event) {
     event.preventDefault();
-    setError('');
+    setMessage('');
     setLoading(true);
+    const form = new FormData(event.currentTarget);
     try {
-      const result = await apiRequest('/usuario/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, senha: password })
+      await onLogin({
+        email: String(form.get('email')).trim(),
+        senha: String(form.get('senha'))
       });
-      onLogin(result);
-    } catch (requestError) {
-      setError(requestError.message);
+    } catch (error) {
+      setMessage(getErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -151,494 +40,500 @@ function Login({ onLogin }) {
 
   return (
     <main className="login-shell">
-      <section className="login-card">
-        <div className="brand-mark"><Package size={23} strokeWidth={2.2} /></div>
-        <p className="eyebrow">GESTÃO DE LOJA</p>
-        <h1>Bem-vindo de volta</h1>
-        <p className="muted">Entre com sua conta para acessar o painel.</p>
-        {error && <div className="alert alert-error" role="alert"><CircleAlert size={18} />{error}</div>}
-        <form className="login-form" onSubmit={submit}>
-          <label className="form-field" htmlFor="login-email">
-            <span>E-mail</span>
-            <input id="login-email" type="email" autoComplete="username" required value={email}
-              onChange={event => setEmail(event.target.value)} />
-          </label>
-          <label className="form-field" htmlFor="login-password">
-            <span>Senha</span>
-            <span className="password-input">
-              <input id="login-password" type={passwordVisible ? 'text' : 'password'}
-                autoComplete="current-password" required value={password}
-                onChange={event => {
-                  setPassword(event.target.value);
-                  setError('');
-                }} />
-              <button type="button" className="password-toggle"
-                aria-label={passwordVisible ? 'Ocultar senha' : 'Mostrar senha'}
-                aria-pressed={passwordVisible}
-                onClick={() => setPasswordVisible(visible => !visible)}>
-                {passwordVisible ? <EyeOff size={17} /> : <Eye size={17} />}
-              </button>
-            </span>
-          </label>
-          <button className="button button-primary button-full" disabled={loading}>
-            {loading ? <><RefreshCw className="spin" size={16} /> Entrando...</> : 'Entrar'}
-          </button>
-        </form>
-        <div className="login-footnote">
-          <span>Use os dados de um usuário ativo da loja.</span>
-          <span className={`login-api-status ${apiStatus}`}>
-            <i className={`status-dot ${apiStatus}`} />
-            {apiStatus === 'online' ? 'API conectada' : apiStatus === 'offline' ? 'API indisponível' : 'Verificando conexão'}
-          </span>
+      <section className="login-art" aria-label="Gestão comercial">
+        <div className="brand brand-light"><span className="brand-mark">V</span> vértice</div>
+        <div className="art-copy">
+          <span className="eyebrow">GESTÃO COMERCIAL</span>
+          <h1>Clareza para<br />cada decisão.</h1>
+          <p>Produtos, estoque e vendas em um só lugar.</p>
+        </div>
+        <div className="art-grid" aria-hidden="true">
+          <span /><span /><span /><span /><span /><span /><span /><span /><span />
+        </div>
+        <div className="art-footer">API conectada ao ambiente publicado</div>
+      </section>
+      <section className="login-panel">
+        <div className="login-form-wrap">
+          <div className="brand brand-dark"><span className="brand-mark">V</span> vértice</div>
+          <span className="eyebrow">BEM-VINDA(O) DE VOLTA</span>
+          <h2>Acesse sua conta</h2>
+          <p className="muted">Entre com suas credenciais para continuar.</p>
+          <form onSubmit={submit} className="form-stack">
+            <label>
+              Email
+              <input name="email" type="email" autoComplete="username" required placeholder="voce@empresa.com" />
+            </label>
+            <label>
+              Senha
+              <input name="senha" type="password" autoComplete="current-password" required placeholder="Sua senha" />
+            </label>
+            {message && <div className="notice notice-error" role="alert">{message}</div>}
+            <button className="button button-primary button-wide" type="submit" disabled={loading}>
+              {loading ? 'Entrando…' : 'Entrar na plataforma'} <span aria-hidden="true">→</span>
+            </button>
+          </form>
+          <div className="login-help">
+            O cadastro de usuários é protegido. A primeira conta precisa ser provisionada pelo responsável pelo banco.
+          </div>
+          <div className="connection-line"><span className="status-dot" /> API: {API_URL}</div>
         </div>
       </section>
     </main>
   );
 }
 
-function Modal({ title, children, onClose, wide = false }) {
-  useEffect(() => {
-    function onKeyDown(event) {
-      if (event.key === 'Escape') onClose();
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
+function FieldInput({ field, value, options, disabled, editing }) {
+  const referenceOptions = field.options && !Array.isArray(field.options);
+  const common = {
+    name: field.name,
+    id: `field-${field.name}`,
+    required: Boolean(field.required || (!editing && field.requiredOnCreate)),
+    disabled
+  };
+
+  if (field.type === 'select' || referenceOptions) {
+    const selectOptions = referenceOptions ? options || [] : field.options || [];
+    return (
+      <select {...common} defaultValue={value ?? field.defaultValue ?? ''}>
+        {field.nullable && <option value="">Não informado</option>}
+        {selectOptions.map(option => (
+          <option value={option.value ?? option[field.options?.id]} key={option.value ?? option[field.options?.id]}>
+            {option.label ?? `${option.prefix || ''}${option[field.options?.label]}`}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  if (field.type === 'textarea') {
+    return <textarea {...common} rows="3" placeholder={field.placeholder || ''} defaultValue={value ?? ''} maxLength={field.maxLength} />;
+  }
 
   return (
-    <div className="modal-backdrop" onMouseDown={event => {
+    <input
+      {...common}
+      type={field.type || 'text'}
+      min={field.min}
+      max={field.max}
+      step={field.step}
+      maxLength={field.maxLength}
+      minLength={field.minLength}
+      placeholder={field.placeholder || ''}
+      defaultValue={value ?? field.defaultValue ?? ''}
+    />
+  );
+}
+
+function RecordForm({ module, record, token, onCancel, onSave, busy, error, setError }) {
+  const [choices, setChoices] = useState({});
+  const [choicesLoading, setChoicesLoading] = useState(false);
+  const editing = Boolean(record);
+
+  useEffect(() => {
+    let active = true;
+    const referenceFields = module.fields.filter(field => field.options && !Array.isArray(field.options));
+    if (!referenceFields.length) return undefined;
+    setChoicesLoading(true);
+    Promise.all(referenceFields.map(async field => {
+      const { endpoint, key } = field.options;
+      const response = await apiRequest(endpoint, { token });
+      return [field.name, response[key]];
+    })).then(entries => {
+      if (active) setChoices(Object.fromEntries(entries));
+    }).catch(loadError => {
+      if (active) setError(`Falha ao carregar opções do formulário: ${getErrorMessage(loadError)}`);
+    }).finally(() => {
+      if (active) setChoicesLoading(false);
+    });
+    return () => { active = false; };
+  }, [module, token, setError]);
+
+  async function submit(event) {
+    event.preventDefault();
+    setError('');
+    const formData = new FormData(event.currentTarget);
+    const payload = {};
+
+    for (const field of module.fields) {
+      let value = formData.get(field.name);
+      if (field.type === 'password' && !value) continue;
+      if (value === '' || value === null) {
+        if (field.nullable) payload[field.name] = null;
+        continue;
+      }
+      if (field.type === 'number') value = Number(value);
+      if (field.valueType === 'number' ||
+          (field.type === 'select' && field.options && !Array.isArray(field.options))) {
+        value = Number(value);
+      }
+      payload[field.name] = value;
+    }
+
+    try {
+      await onSave(payload);
+    } catch (saveError) {
+      setError(getErrorMessage(saveError));
+    }
+  }
+
+  return (
+    <form className="record-form" onSubmit={submit}>
+      <div className="field-grid">
+        {module.fields.map(field => (
+          <label className={field.type === 'textarea' ? 'field-wide' : ''} key={field.name} htmlFor={`field-${field.name}`}>
+            {field.label}
+            <FieldInput
+              field={field}
+              value={record?.[field.name]}
+              options={choices[field.name]}
+              disabled={choicesLoading}
+              editing={editing}
+            />
+          </label>
+        ))}
+      </div>
+      {choicesLoading && <p className="muted small">Carregando opções…</p>}
+      {error && <div className="notice notice-error" role="alert">{error}</div>}
+      <div className="dialog-actions">
+        <button type="button" className="button button-quiet" onClick={onCancel} disabled={busy}>Cancelar</button>
+        <button type="submit" className="button button-primary" disabled={busy || choicesLoading}>
+          {busy ? 'Salvando…' : editing ? 'Salvar alterações' : 'Cadastrar'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function Dialog({ title, children, onClose, wide = false }) {
+  return (
+    <div className="dialog-backdrop" onMouseDown={event => {
       if (event.target === event.currentTarget) onClose();
     }}>
-      <section className={`modal ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-labelledby="modal-title">
-        <header className="modal-header">
-          <h2 id="modal-title">{title}</h2>
-          <button className="icon-button" aria-label="Fechar" onClick={onClose}><X size={19} /></button>
-        </header>
+      <section className={`dialog ${wide ? 'dialog-wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
+        <div className="dialog-heading">
+          <div><span className="eyebrow">GESTÃO COMERCIAL</span><h2>{title}</h2></div>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Fechar">×</button>
+        </div>
         {children}
       </section>
     </div>
   );
 }
 
-function RecordForm({ module, record, onClose, onSaved }) {
-  const editing = Boolean(record);
-  const fields = editing ? module.editFields : module.createFields;
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+function Dashboard({ onNavigate, token }) {
+  const [health, setHealth] = useState('checking');
+  useEffect(() => {
+    let active = true;
+    apiRequest('/teste', { token }).then(() => {
+      if (active) setHealth('online');
+    }).catch(() => {
+      if (active) setHealth('offline');
+    });
+    return () => { active = false; };
+  }, [token]);
 
-  async function submit(event) {
-    event.preventDefault();
-    setError('');
+  const shortcuts = [
+    modules.find(item => item.key === 'produtos'),
+    modules.find(item => item.key === 'estoque'),
+    modules.find(item => item.key === 'pedidos'),
+    modules.find(item => item.key === 'clientes')
+  ];
+
+  return (
+    <div className="dashboard">
+      <div className="welcome-panel">
+        <div>
+          <span className="eyebrow">PAINEL DE CONTROLE</span>
+          <h2>Bem-vinda(o) à sua operação.</h2>
+          <p>Acesse os módulos para consultar ou atualizar seus dados comerciais.</p>
+        </div>
+        <div className={`api-status ${health}`}>
+          <span className="status-dot" />
+          {health === 'checking' ? 'Verificando API…' : health === 'online' ? 'API online' : 'API indisponível'}
+        </div>
+      </div>
+      <div className="section-title"><div><h3>Acesso rápido</h3><p>Seus módulos mais utilizados</p></div></div>
+      <div className="shortcut-grid">
+        {shortcuts.map((item, index) => (
+          <button className="shortcut-card" key={item.key} onClick={() => onNavigate(item.key)}>
+            <span className={`shortcut-icon accent-${index}`}>{item.icon}</span>
+            <span className="shortcut-title">{item.label}</span>
+            <span className="shortcut-description">{item.description}</span>
+            <span className="shortcut-arrow">Abrir módulo <span aria-hidden="true">→</span></span>
+          </button>
+        ))}
+      </div>
+      <div className="info-panel">
+        <span className="info-icon">i</span>
+        <p>As operações de cadastro, alteração e exclusão exigem uma sessão autenticada. O token permanece apenas nesta sessão do navegador.</p>
+      </div>
+    </div>
+  );
+}
+
+function ModuleView({ module, token, notify }) {
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
+  const [dialog, setDialog] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [dialogError, setDialogError] = useState('');
+
+  async function reload() {
     setLoading(true);
     try {
-      const payload = buildPayload(new FormData(event.currentTarget), fields);
-      const method = editing ? 'PATCH' : 'POST';
-      const path = editing
-        ? `${module.endpoint}/${record[module.idField]}`
-        : module.endpoint;
-      await apiRequest(path, { method, body: JSON.stringify(payload) });
-      onSaved();
-    } catch (requestError) {
-      setError(requestError.message);
+      const response = await apiRequest(module.endpoint, { token });
+      setRecords(response[module.listKey] || []);
+    } catch (error) {
+      notify(getErrorMessage(error), 'error');
     } finally {
       setLoading(false);
     }
   }
 
-  return (
-    <Modal title={`${editing ? 'Editar' : 'Novo'} ${module.singular}`} onClose={onClose}>
-      <form className="record-form" onSubmit={submit}>
-        {error && <div className="alert alert-error" role="alert"><CircleAlert size={18} />{error}</div>}
-        {fields.map(field => (
-          <Field key={field.name} field={field}
-            value={inputValue(editing ? record[field.name] : '', field)} />
-        ))}
-        <footer className="form-actions">
-          <button className="button button-quiet" type="button" onClick={onClose}>Cancelar</button>
-          <button className="button button-primary" disabled={loading}>
-            {loading ? 'Salvando...' : editing ? 'Salvar alterações' : 'Criar registro'}
-          </button>
-        </footer>
-      </form>
-    </Modal>
-  );
-}
-
-function Detail({ module, record, onClose }) {
-  const [detail, setDetail] = useState(record);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
   useEffect(() => {
-    let active = true;
-    apiRequest(`${module.endpoint}/${record[module.idField]}`)
-      .then(result => {
-        if (active) setDetail(result[module.itemKey] || record);
-      })
-      .catch(requestError => {
-        if (active) setError(requestError.message);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
+    setQuery('');
+    setDialog(null);
+    reload();
+  }, [module, token]);
+
+  const visibleRecords = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase('pt-BR');
+    if (!normalized) return records;
+    return records.filter(record =>
+      Object.values(record).some(value => String(value ?? '').toLocaleLowerCase('pt-BR').includes(normalized))
+    );
+  }, [records, query]);
+
+  function openForm(mode, record = null) {
+    setDialogError('');
+    setDialog({ mode, record });
+  }
+
+  async function saveRecord(payload) {
+    setBusy(true);
+    try {
+      const editing = dialog.mode === 'edit';
+      const path = editing ? `${module.endpoint}/${dialog.record[module.idKey]}` : module.endpoint;
+      const response = await apiRequest(path, {
+        token,
+        method: editing ? 'PATCH' : 'POST',
+        body: JSON.stringify(payload)
       });
-    return () => { active = false; };
-  }, [module, record]);
-
-  return (
-    <Modal title={`Detalhes · ${module.title}`} onClose={onClose} wide>
-      <div className="detail-content">
-        {loading && <p className="muted">Carregando detalhes...</p>}
-        {error && <div className="alert alert-error" role="alert"><CircleAlert size={18} />{error}</div>}
-        {!loading && (
-          <dl className="detail-grid">
-            {Object.entries(detail).map(([key, value]) => (
-              <div className="detail-item" key={key}>
-                <dt>{formatLabel(key)}</dt>
-                <dd>{formatValue(value, key)}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
-      </div>
-    </Modal>
-  );
-}
-
-function Dashboard({ onNavigate }) {
-  const [metrics, setMetrics] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    const results = await Promise.all(modules.map(async module => {
-      try {
-        const response = await apiRequest(module.endpoint);
-        const rows = response[module.listKey];
-        return { id: module.id, count: Array.isArray(rows) ? rows.length : 0 };
-      } catch {
-        return { id: module.id, count: null };
-      }
-    }));
-    setMetrics(results);
-    if (results.every(result => result.count === null)) {
-      setError('Não foi possível carregar os dados. Confira a conexão com a API.');
+      setDialog(null);
+      notify(response.mensagem || 'Operação realizada com sucesso.', 'success');
+      await reload();
+    } finally {
+      setBusy(false);
     }
-    setLoading(false);
-  }, []);
+  }
 
-  useEffect(() => { load(); }, [load]);
+  async function deleteRecord(record) {
+    if (!window.confirm(`Deseja excluir ou desativar este registro de ${module.label.toLocaleLowerCase('pt-BR')}?`)) return;
+    try {
+      const response = await apiRequest(`${module.endpoint}/${record[module.idKey]}`, {
+        token,
+        method: 'DELETE'
+      });
+      notify(response.mensagem || 'Registro removido com sucesso.', 'success');
+      await reload();
+    } catch (error) {
+      notify(getErrorMessage(error), 'error');
+    }
+  }
 
-  const total = metrics?.reduce((sum, item) => sum + (item.count || 0), 0);
-  const unavailable = metrics?.filter(item => item.count === null).length || 0;
+  async function viewDetails(record) {
+    setDialogError('');
+    try {
+      const response = await apiRequest(`${module.endpoint}/${record[module.idKey]}`, { token });
+      setDialog({ mode: 'details', record: response[module.detailKey] || record });
+    } catch (error) {
+      notify(getErrorMessage(error), 'error');
+    }
+  }
 
   return (
-    <>
-      <div className="page-heading">
+    <section className="module-view">
+      <div className="module-heading">
         <div>
-          <p className="eyebrow">VISÃO GERAL</p>
-          <h1>Dashboard</h1>
-          <p className="muted">Resumo dos dados cadastrados na sua loja.</p>
+          <span className="eyebrow">MÓDULOS / {module.label.toLocaleUpperCase('pt-BR')}</span>
+          <h2>{module.label}</h2>
+          <p>{module.description}</p>
         </div>
-        <button className="button button-secondary" onClick={load} disabled={loading}>
-          <RefreshCw size={16} className={loading ? 'spin' : ''} /> Atualizar
-        </button>
-      </div>
-      <div className="stat-grid">
-        <article className="stat-card stat-card-primary">
-          <div className="stat-icon"><LayoutDashboard size={20} /></div>
-          <span>Total de registros</span>
-          <strong>{loading ? '...' : total}</strong>
-          <small>Somatório das listas da API</small>
-        </article>
-        <article className="stat-card">
-          <div className="stat-icon stat-icon-soft"><Package size={20} /></div>
-          <span>Produtos</span>
-          <strong>{loading ? '...' : metrics?.find(item => item.id === 'produtos')?.count ?? '—'}</strong>
-          <small>Catálogo cadastrado</small>
-        </article>
-        <article className="stat-card">
-          <div className="stat-icon stat-icon-soft"><Boxes size={20} /></div>
-          <span>Itens em estoque</span>
-          <strong>{loading ? '...' : metrics?.find(item => item.id === 'estoque')?.count ?? '—'}</strong>
-          <small>Produtos com controle de estoque</small>
-        </article>
-        <article className="stat-card">
-          <div className="stat-icon stat-icon-soft"><ShoppingBag size={20} /></div>
-          <span>Pedidos</span>
-          <strong>{loading ? '...' : metrics?.find(item => item.id === 'pedidos')?.count ?? '—'}</strong>
-          <small>Pedidos registrados</small>
-        </article>
-      </div>
-      {error && <div className="alert alert-error dashboard-alert" role="alert"><CircleAlert size={18} />{error}</div>}
-      {unavailable > 0 && !error && (
-        <div className="alert alert-warning dashboard-alert">
-          <CircleAlert size={18} /> {unavailable} {unavailable === 1 ? 'módulo não respondeu' : 'módulos não responderam'} à API.
+        <div className="heading-actions">
+          <button className="button button-quiet" onClick={reload} disabled={loading}><span aria-hidden="true">↻</span> Atualizar</button>
+          {module.operations.includes('create') && (
+            <button className="button button-primary" onClick={() => openForm('create')}><span aria-hidden="true">＋</span> Novo cadastro</button>
+          )}
         </div>
+      </div>
+
+      <div className="table-card">
+        <div className="table-toolbar">
+          <div><strong>{loading ? '—' : visibleRecords.length}</strong><span> registros</span></div>
+          <label className="search-box">
+            <span aria-hidden="true">⌕</span>
+            <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar nesta lista…" aria-label="Buscar nesta lista" />
+          </label>
+        </div>
+        <div className="table-scroll">
+          <table>
+            <thead><tr>
+              {module.columns.map(([, label]) => <th key={label}>{label}</th>)}
+              <th className="actions-heading">Ações</th>
+            </tr></thead>
+            <tbody>
+              {loading ? (
+                <tr><td className="empty-state" colSpan={module.columns.length + 1}>Carregando dados…</td></tr>
+              ) : visibleRecords.length === 0 ? (
+                <tr><td className="empty-state" colSpan={module.columns.length + 1}>
+                  {records.length ? 'Nenhum resultado para esta busca.' : 'Ainda não há registros neste módulo.'}
+                </td></tr>
+              ) : visibleRecords.map(record => (
+                <tr key={record[module.idKey]}>
+                  {module.columns.map(([key]) => <td key={key} title={formatValue(record[key], key)}>{formatValue(record[key], key)}</td>)}
+                  <td className="row-actions">
+                    <button className="text-button" onClick={() => viewDetails(record)}>Detalhes</button>
+                    {module.operations.includes('edit') && <button className="text-button" onClick={() => openForm('edit', record)}>Editar</button>}
+                    {module.operations.includes('delete') && <button className="text-button danger-text" onClick={() => deleteRecord(record)}>Excluir</button>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {dialog?.mode === 'details' && (
+        <Dialog title={`Detalhes • ${module.label}`} onClose={() => setDialog(null)} wide>
+          <pre className="details-json">{JSON.stringify(dialog.record, null, 2)}</pre>
+        </Dialog>
       )}
-      <section className="panel quick-panel">
-        <div className="panel-heading">
-          <div><h2>Acesso rápido</h2><p className="muted">Abra uma área de gerenciamento.</p></div>
-        </div>
-        <div className="quick-grid">
-          {modules.slice(0, 8).map(module => {
-            const Icon = iconMap[module.icon] || FileText;
-            return (
-              <button className="quick-link" key={module.id} onClick={() => onNavigate(module.id)}>
-                <span className="nav-icon"><Icon size={18} /></span>
-                <span>{module.title}</span><ChevronDown className="quick-arrow" size={16} />
-              </button>
-            );
-          })}
-        </div>
-      </section>
-    </>
-  );
-}
-
-function DataTable({ module, rows, search, onSearch, onCreate, onEdit, onDelete, onDetails }) {
-  const filtered = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase('pt-BR');
-    if (!query) return rows;
-    return rows.filter(row => Object.values(row).some(value =>
-      String(value ?? '').toLocaleLowerCase('pt-BR').includes(query)
-    ));
-  }, [rows, search]);
-
-  return (
-    <section className="panel table-panel">
-      <div className="table-toolbar">
-        <div className="search-box">
-          <Search size={17} />
-          <input aria-label={`Buscar em ${module.title}`} placeholder="Buscar registros..." value={search}
-            onChange={event => onSearch(event.target.value)} />
-        </div>
-        {module.createFields && (
-          <button className="button button-primary" onClick={onCreate}><Plus size={17} /> Novo registro</button>
-        )}
-      </div>
-      {filtered.length === 0
-        ? (
-          <div className="empty-state">
-            <div className="empty-icon"><Search size={21} /></div>
-            <h3>{rows.length ? 'Nenhum resultado' : 'Nenhum registro ainda'}</h3>
-            <p>{rows.length ? 'Tente outra busca.' : 'Quando houver dados na API, eles aparecerão aqui.'}</p>
-            {!rows.length && module.createFields && (
-              <button className="button button-secondary" onClick={onCreate}><Plus size={16} /> Criar primeiro registro</button>
-            )}
-          </div>
-        )
-        : (
-          <>
-            <div className="table-scroll">
-              <table>
-                <thead><tr>
-                  {module.columns.map(column => <th key={column}>{formatLabel(column)}</th>)}
-                  <th className="actions-heading">Ações</th>
-                </tr></thead>
-                <tbody>
-                  {filtered.map((row, index) => (
-                    <tr key={row[module.idField] ?? index}>
-                      {module.columns.map(column => (
-                        <td key={column}>
-                          {column === 'ativo'
-                            ? <span className={`status-pill ${Number(row[column]) === 1 ? 'status-active' : 'status-inactive'}`}>
-                              {Number(row[column]) === 1 ? 'Ativo' : 'Inativo'}
-                            </span>
-                            : formatValue(row[column], column)}
-                        </td>
-                      ))}
-                      <td>
-                        <div className="row-actions">
-                          <button className="text-button" onClick={() => onDetails(row)}>Detalhes</button>
-                          {module.editFields && <button className="text-button" onClick={() => onEdit(row)}>Editar</button>}
-                          {module.deleteLabel && (
-                            <button className="text-button text-danger" onClick={() => onDelete(row)}>
-                              {module.deleteLabel}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <footer className="table-footer">{filtered.length} {filtered.length === 1 ? 'registro' : 'registros'}</footer>
-          </>
-        )}
+      {(dialog?.mode === 'create' || dialog?.mode === 'edit') && (
+        <Dialog title={dialog.mode === 'edit' ? `Editar ${module.label.toLocaleLowerCase('pt-BR')}` : `Novo cadastro • ${module.label}`} onClose={() => setDialog(null)}>
+          <RecordForm
+            module={module}
+            record={dialog.record}
+            token={token}
+            onCancel={() => setDialog(null)}
+            onSave={saveRecord}
+            busy={busy}
+            error={dialogError}
+            setError={setDialogError}
+          />
+        </Dialog>
+      )}
     </section>
   );
 }
 
-function ModulePage({ module, onBack }) {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [search, setSearch] = useState('');
-  const [formRecord, setFormRecord] = useState(undefined);
-  const [detailRecord, setDetailRecord] = useState(null);
-  const [notice, setNotice] = useState('');
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const result = await apiRequest(module.endpoint);
-      setRows(Array.isArray(result[module.listKey]) ? result[module.listKey] : []);
-    } catch (requestError) {
-      setError(requestError.message);
-      setRows([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [module]);
-
-  useEffect(() => { load(); }, [load]);
-
-  async function removeRecord(row) {
-    const id = row[module.idField];
-    if (!window.confirm(`Confirma ${module.deleteLabel?.toLowerCase()} "${row.nome || row[module.idField]}"?`)) return;
-    setError('');
-    setNotice('');
-    try {
-      await apiRequest(`${module.endpoint}/${id}`, { method: 'DELETE' });
-      setNotice('Registro removido com sucesso.');
-      await load();
-    } catch (requestError) {
-      setError(requestError.message);
-    }
-  }
-
-  function saved() {
-    setFormRecord(undefined);
-    setNotice('Registro salvo com sucesso.');
-    load();
-  }
-
-  return (
-    <>
-      <button className="back-link" onClick={onBack}><ArrowLeft size={16} /> Voltar ao dashboard</button>
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">GERENCIAMENTO</p>
-          <h1>{module.title}</h1>
-          <p className="muted">Consulte e gerencie os dados de {module.title.toLocaleLowerCase('pt-BR')}.</p>
-        </div>
-        <button className="button button-secondary" onClick={load} disabled={loading}>
-          <RefreshCw size={16} className={loading ? 'spin' : ''} /> Atualizar
-        </button>
-      </div>
-      {notice && <div className="alert alert-success" role="status">{notice}<button className="alert-close" onClick={() => setNotice('')} aria-label="Fechar aviso"><X size={16} /></button></div>}
-      {error && <div className="alert alert-error" role="alert"><CircleAlert size={18} />{error}<button className="alert-close" onClick={() => setError('')} aria-label="Fechar erro"><X size={16} /></button></div>}
-      {loading
-        ? <section className="panel loading-panel"><RefreshCw size={19} className="spin" /> Carregando dados...</section>
-        : !error && (
-          <DataTable module={module} rows={rows} search={search} onSearch={setSearch}
-            onCreate={() => setFormRecord(null)} onEdit={setFormRecord}
-            onDelete={removeRecord} onDetails={setDetailRecord} />
-        )}
-      {formRecord !== undefined && (
-        <RecordForm key={`${module.id}-${formRecord?.[module.idField] ?? 'new'}`}
-          module={module} record={formRecord} onClose={() => setFormRecord(undefined)} onSaved={saved} />
-      )}
-      {detailRecord && <Detail module={module} record={detailRecord} onClose={() => setDetailRecord(null)} />}
-    </>
-  );
-}
-
 export default function App() {
-  const [session, setSession] = useState(readSavedSession);
-  const [activePage, setActivePage] = useState('dashboard');
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [apiStatus, setApiStatus] = useState('checking');
+  const [token, setToken] = useState(() => getToken());
+  const [user, setUser] = useState(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem('gestao-user') || 'null');
+    } catch {
+      return null;
+    }
+  });
+  const [activeKey, setActiveKey] = useState(null);
+  const [loginMessage, setLoginMessage] = useState('');
+  const [toast, setToast] = useState(null);
+  const activeModule = modules.find(module => module.key === activeKey);
 
   useEffect(() => {
-    apiRequest('/teste')
-      .then(() => setApiStatus('online'))
-      .catch(() => setApiStatus('offline'));
+    const expireSession = () => {
+      sessionStorage.removeItem('gestao-token');
+      sessionStorage.removeItem('gestao-user');
+      setToken(null);
+      setUser(null);
+      setActiveKey(null);
+      setLoginMessage('Sua sessão expirou. Entre novamente.');
+    };
+    window.addEventListener('api:unauthorized', expireSession);
+    return () => window.removeEventListener('api:unauthorized', expireSession);
   }, []);
 
-  function login(result) {
-    const nextSession = { user: result.usuario, token: result.token };
-    sessionStorage.setItem('loja-user', JSON.stringify(nextSession.user));
-    sessionStorage.setItem('loja-token', nextSession.token);
-    setSession(nextSession);
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timeout = window.setTimeout(() => setToast(null), 4200);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
+  async function login(credentials) {
+    const response = await apiRequest('/usuario/login', {
+      method: 'POST',
+      body: JSON.stringify(credentials)
+    });
+    sessionStorage.setItem('gestao-token', response.token);
+    sessionStorage.setItem('gestao-user', JSON.stringify(response.usuario));
+    setToken(response.token);
+    setUser(response.usuario);
+    setLoginMessage('');
+    setActiveKey(null);
   }
 
   function logout() {
-    sessionStorage.removeItem('loja-user');
-    sessionStorage.removeItem('loja-token');
-    setSession(null);
-    setActivePage('dashboard');
+    sessionStorage.removeItem('gestao-token');
+    sessionStorage.removeItem('gestao-user');
+    setToken(null);
+    setUser(null);
+    setActiveKey(null);
+    setToast(null);
   }
 
-  if (!session) return <Login onLogin={login} />;
-
-  const selectedModule = modules.find(module => module.id === activePage);
-
-  function navigate(page) {
-    setActivePage(page);
-    setMobileMenuOpen(false);
+  if (!token) {
+    return <Login onLogin={login} message={loginMessage} setMessage={setLoginMessage} />;
   }
 
   return (
     <div className="app-shell">
-      <aside className={`sidebar ${mobileMenuOpen ? 'sidebar-open' : ''}`}>
-        <div className="sidebar-brand">
-          <div className="brand-mark"><Package size={21} strokeWidth={2.2} /></div>
-          <div><strong>Varejo</strong><span>Gestão de loja</span></div>
-          <button className="icon-button sidebar-close" aria-label="Fechar menu" onClick={() => setMobileMenuOpen(false)}><X size={18} /></button>
-        </div>
-        <div className="nav-caption">MENU PRINCIPAL</div>
-        <nav className="side-nav" aria-label="Navegação principal">
-          <button className={`nav-item ${activePage === 'dashboard' ? 'nav-active' : ''}`} onClick={() => navigate('dashboard')}>
-            <LayoutDashboard size={18} /><span>Dashboard</span>
+      <aside className="sidebar">
+        <button className="brand brand-sidebar" onClick={() => setActiveKey(null)} aria-label="Ir ao painel">
+          <span className="brand-mark">V</span><span>vértice</span>
+        </button>
+        <div className="workspace-label">ESPAÇO DE TRABALHO</div>
+        <button className={`nav-item ${!activeKey ? 'active' : ''}`} onClick={() => setActiveKey(null)}>
+          <span className="nav-icon">⌂</span> Painel inicial
+        </button>
+        <div className="nav-section">OPERAÇÃO</div>
+        {modules.slice(0, 8).map(module => (
+          <button key={module.key} className={`nav-item ${activeKey === module.key ? 'active' : ''}`} onClick={() => setActiveKey(module.key)}>
+            <span className="nav-icon">{module.icon}</span>{module.label}
           </button>
-          <div className="nav-caption nav-caption-spaced">GESTÃO</div>
-          {modules.map(module => {
-            const Icon = iconMap[module.icon] || FileText;
-            return (
-              <button key={module.id} className={`nav-item ${activePage === module.id ? 'nav-active' : ''}`}
-                onClick={() => navigate(module.id)}>
-                <Icon size={18} /><span>{module.title}</span>
-              </button>
-            );
-          })}
-        </nav>
+        ))}
+        <div className="nav-section">VENDAS E AUDITORIA</div>
+        {modules.slice(8, 13).map(module => (
+          <button key={module.key} className={`nav-item ${activeKey === module.key ? 'active' : ''}`} onClick={() => setActiveKey(module.key)}>
+            <span className="nav-icon">{module.icon}</span>{module.label}
+          </button>
+        ))}
+        <div className="nav-section">ACESSO</div>
+        {modules.slice(13).map(module => (
+          <button key={module.key} className={`nav-item ${activeKey === module.key ? 'active' : ''}`} onClick={() => setActiveKey(module.key)}>
+            <span className="nav-icon">{module.icon}</span>{module.label}
+          </button>
+        ))}
         <div className="sidebar-bottom">
-          <div className={`connection-indicator ${apiStatus}`}>
-            <span className="connection-dot" />
-            <span>{apiStatus === 'online' ? 'API conectada' : apiStatus === 'offline' ? 'API indisponível' : 'Verificando API'}</span>
+          <div className="profile">
+            <span className="avatar">{(user?.nome || 'U').slice(0, 1).toLocaleUpperCase('pt-BR')}</span>
+            <span className="profile-copy"><strong>{user?.nome || 'Usuário'}</strong><small>{user?.email || 'Sessão autenticada'}</small></span>
           </div>
-          <button className="profile-button" onClick={logout}>
-            <span className="avatar">{(session.user?.nome || 'U').charAt(0).toUpperCase()}</span>
-            <span className="profile-copy"><strong>{session.user?.nome || 'Usuário'}</strong><small>{session.user?.email}</small></span>
-            <LogOut size={17} />
-          </button>
+          <button className="nav-item logout-button" onClick={logout}><span className="nav-icon">↪</span> Sair da conta</button>
         </div>
       </aside>
-      {mobileMenuOpen && <button className="mobile-overlay" onClick={() => setMobileMenuOpen(false)} aria-label="Fechar menu" />}
       <main className="main-area">
         <header className="topbar">
-          <button className="icon-button mobile-menu-button" aria-label="Abrir menu" onClick={() => setMobileMenuOpen(true)}><Menu size={21} /></button>
-          <div className="breadcrumb"><span>Varejo</span><span className="breadcrumb-separator">/</span><strong>{selectedModule?.title || 'Dashboard'}</strong></div>
-          <div className="topbar-user">
-            <span className="topbar-status"><i className={`status-dot ${apiStatus}`} />{apiStatus === 'online' ? 'Online' : apiStatus === 'offline' ? 'API offline' : 'Conectando'}</span>
-            <span className="topbar-avatar">{(session.user?.nome || 'U').charAt(0).toUpperCase()}</span>
-          </div>
+          <span className="breadcrumb">Gestão comercial <span>/</span> {activeModule?.label || 'Visão geral'}</span>
+          <a href="https://backend-1-puom.onrender.com/teste" target="_blank" rel="noreferrer" className="api-link">API publicada <span aria-hidden="true">↗</span></a>
         </header>
-        <div className="content-area">
-          <div className="security-note">
-            <CircleAlert size={15} />
-            <span>O login atual não restringe o acesso aos demais endpoints da API.</span>
-          </div>
-          {selectedModule
-            ? <ModulePage key={selectedModule.id} module={selectedModule} onBack={() => navigate('dashboard')} />
-            : <Dashboard onNavigate={navigate} />}
-          <footer className="app-footer">Varejo <span>·</span> Painel de gestão</footer>
+        <div className="page-content">
+          {activeModule
+            ? <ModuleView module={activeModule} token={token} notify={(message, type) => setToast({ message, type })} />
+            : <Dashboard token={token} onNavigate={setActiveKey} />}
         </div>
       </main>
+      {toast && <div className={`toast toast-${toast.type}`} role="status">{toast.message}</div>}
     </div>
   );
 }

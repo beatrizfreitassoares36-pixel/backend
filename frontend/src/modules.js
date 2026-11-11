@@ -1,206 +1,282 @@
-const text = (name, label, options = {}) => ({ name, label, type: 'text', ...options });
-const number = (name, label, options = {}) => ({ name, label, type: 'number', ...options });
-const date = (name, label, options = {}) => ({ name, label, type: 'date', ...options });
-const select = (name, label, options, extra = {}) => ({
-  name, label, type: 'select', options, ...extra
+const idField = (label, key) => ({ name: key, label, type: 'number', required: true, min: 1 });
+const optionalText = (label, name, extra = {}) => ({
+  name, label, type: 'text', nullable: true, ...extra
+});
+const requiredText = (label, name, extra = {}) => ({
+  name, label, type: 'text', required: true, ...extra
+});
+const currency = (label, name, required = true) => ({
+  name, label, type: 'number', required, min: 0, step: '0.01'
+});
+const positiveInteger = (label, name) => ({
+  name, label, type: 'number', required: true, min: 1, step: '1'
 });
 
 export const modules = [
   {
-    id: 'usuarios', title: 'Usuários', singular: 'usuário', endpoint: '/usuario', listKey: 'usuarios',
-    itemKey: 'usuario', idField: 'id_usuario', icon: 'users',
-    columns: ['id_usuario', 'nome', 'email', 'contato', 'ativo'],
-    createFields: [
-      text('nome', 'Nome', { required: true }),
-      text('email', 'E-mail', { required: true, inputType: 'email' }),
-      text('senha', 'Senha', { required: true, inputType: 'password', minLength: 8 }),
-      text('contato', 'Contato', { nullable: true }),
-      text('genero', 'Gênero', { nullable: true })
+    key: 'produtos', label: 'Produtos', icon: '▦', endpoint: '/produtos',
+    listKey: 'produtos', detailKey: 'produto', idKey: 'id_produto',
+    description: 'Catálogo de produtos e preços.',
+    columns: [
+      ['id_produto', 'Código'], ['nome', 'Produto'], ['preco', 'Preço'],
+      ['id_categoria', 'Categoria'], ['descricao', 'Descrição']
     ],
-    editFields: [
-      text('nome', 'Nome'), text('email', 'E-mail', { inputType: 'email' }),
-      text('senha', 'Nova senha', { inputType: 'password', minLength: 8 }),
-      text('contato', 'Contato', { nullable: true }), text('genero', 'Gênero', { nullable: true })
+    fields: [
+      requiredText('Nome', 'nome'),
+      { name: 'descricao', label: 'Descrição', type: 'textarea', nullable: true },
+      currency('Preço', 'preco'),
+      optionalText('URL da imagem', 'imagem_produto'),
+      {
+        ...idField('Categoria', 'id_categoria'), required: false, nullable: true,
+        options: { endpoint: '/categorias', key: 'categorias', id: 'id_categoria', label: 'nome' }
+      }
     ],
-    deleteLabel: 'Desativar'
+    operations: ['create', 'edit', 'delete']
   },
   {
-    id: 'funcionarios', title: 'Funcionários', singular: 'funcionário', endpoint: '/funcionario', listKey: 'funcionarios',
-    itemKey: 'funcionario', idField: 'id_funcionario', icon: 'briefcase',
-    columns: ['id_funcionario', 'nome', 'cargo', 'salario', 'email', 'ativo'],
-    createFields: [
-      text('nome', 'Nome', { required: true }), text('cargo', 'Cargo', { required: true }),
-      number('salario', 'Salário', { required: true, min: 0, step: '0.01' }),
-      text('telefone', 'Telefone', { nullable: true }), text('email', 'E-mail', { inputType: 'email', nullable: true }),
-      date('data_admissao', 'Data de admissão', { nullable: true })
+    key: 'categorias', label: 'Categorias', icon: '◫', endpoint: '/categorias',
+    listKey: 'categorias', detailKey: 'categoria', idKey: 'id_categoria',
+    description: 'Organize o catálogo por categoria.',
+    columns: [['id_categoria', 'Código'], ['nome', 'Categoria'], ['descricao', 'Descrição']],
+    fields: [
+      requiredText('Nome', 'nome'),
+      { name: 'descricao', label: 'Descrição', type: 'textarea', nullable: true }
     ],
-    editFields: [
-      text('nome', 'Nome'), text('cargo', 'Cargo'),
-      number('salario', 'Salário', { min: 0, step: '0.01' }),
-      text('telefone', 'Telefone', { nullable: true }), text('email', 'E-mail', { inputType: 'email', nullable: true }),
-      date('data_admissao', 'Data de admissão', { nullable: true })
+    operations: ['create', 'edit', 'delete']
+  },
+  {
+    key: 'estoque', label: 'Estoque', icon: '▤', endpoint: '/estoque',
+    listKey: 'estoque', detailKey: 'item', idKey: 'id_produto',
+    description: 'Consulte quantidades e atualize limites e localização.',
+    columns: [
+      ['id_produto', 'Produto #'], ['produto', 'Produto'], ['quantidade', 'Disponível'],
+      ['estoque_minimo', 'Mínimo'], ['estoque_maximo', 'Máximo'], ['localizacao', 'Localização']
     ],
-    deleteLabel: 'Desativar'
-  },
-  {
-    id: 'categorias', title: 'Categorias', singular: 'categoria', endpoint: '/categorias', listKey: 'categorias',
-    itemKey: 'categoria', idField: 'id_categoria', icon: 'tag',
-    columns: ['id_categoria', 'nome', 'descricao', 'ativo'],
-    createFields: [text('nome', 'Nome', { required: true }), text('descricao', 'Descrição', { multiline: true })],
-    editFields: [text('nome', 'Nome'), text('descricao', 'Descrição', { multiline: true })],
-    deleteLabel: 'Desativar'
-  },
-  {
-    id: 'clientes', title: 'Clientes', singular: 'cliente', endpoint: '/clientes', listKey: 'clientes',
-    itemKey: 'cliente', idField: 'id_cliente', icon: 'contact',
-    columns: ['id_cliente', 'nome', 'email', 'contato', 'ativo'],
-    createFields: [
-      text('nome', 'Nome', { required: true }),
-      text('email', 'E-mail', { required: true, inputType: 'email' }),
-      text('contato', 'Contato', { nullable: true })
+    fields: [
+      { name: 'estoque_minimo', label: 'Estoque mínimo', type: 'number', min: 0, step: 1, nullable: true },
+      { name: 'estoque_maximo', label: 'Estoque máximo', type: 'number', min: 0, step: 1, nullable: true },
+      optionalText('Localização', 'localizacao')
     ],
-    editFields: [
-      text('nome', 'Nome'), text('email', 'E-mail', { inputType: 'email' }),
-      text('contato', 'Contato', { nullable: true })
+    operations: ['edit']
+  },
+  {
+    key: 'entradas', label: 'Entradas', icon: '↓', endpoint: '/entradas',
+    listKey: 'entradas', detailKey: 'entrada', idKey: 'id_entrada',
+    description: 'Registre recebimentos de produtos no estoque.',
+    columns: [
+      ['id_entrada', 'Código'], ['id_produto', 'Produto #'], ['id_fornecedor', 'Fornecedor #'],
+      ['quantidade', 'Quantidade'], ['valor_unitario', 'Valor unitário'], ['data_entrada', 'Data']
     ],
-    deleteLabel: 'Desativar'
-  },
-  {
-    id: 'fornecedores', title: 'Fornecedores', singular: 'fornecedor', endpoint: '/fornecedores', listKey: 'fornecedores',
-    itemKey: 'fornecedor', idField: 'id_fornecedor', icon: 'truck',
-    columns: ['id_fornecedor', 'nome', 'empresa', 'email', 'telefone', 'cidade'],
-    createFields: [
-      text('nome', 'Nome', { required: true }), text('empresa', 'Empresa'),
-      text('email', 'E-mail', { inputType: 'email', nullable: true }), text('telefone', 'Telefone', { nullable: true }),
-      text('cidade', 'Cidade', { nullable: true }), text('estado', 'Estado', { nullable: true })
+    fields: [
+      {
+        ...idField('Produto', 'id_produto'),
+        options: { endpoint: '/produtos', key: 'produtos', id: 'id_produto', label: 'nome' }
+      },
+      {
+        ...idField('Fornecedor', 'id_fornecedor'),
+        options: { endpoint: '/fornecedores', key: 'fornecedores', id: 'id_fornecedor', label: 'nome' }
+      },
+      positiveInteger('Quantidade', 'quantidade'),
+      currency('Valor unitário', 'valor_unitario'),
+      { name: 'data_entrada', label: 'Data de entrada', type: 'date', nullable: true },
+      { name: 'observacao', label: 'Observação', type: 'textarea', nullable: true }
     ],
-    editFields: [
-      text('nome', 'Nome'), text('empresa', 'Empresa'),
-      text('email', 'E-mail', { inputType: 'email', nullable: true }), text('telefone', 'Telefone', { nullable: true }),
-      text('cidade', 'Cidade', { nullable: true }), text('estado', 'Estado', { nullable: true })
+    operations: ['create']
+  },
+  {
+    key: 'saidas', label: 'Saídas', icon: '↑', endpoint: '/saidas',
+    listKey: 'saidas', detailKey: 'saida', idKey: 'id_saida',
+    description: 'Registre saídas; a API valida o saldo em estoque.',
+    columns: [
+      ['id_saida', 'Código'], ['id_produto', 'Produto #'], ['id_funcionario', 'Funcionário #'],
+      ['quantidade', 'Quantidade'], ['valor_unitario', 'Valor unitário'], ['data_saida', 'Data']
     ],
-    deleteLabel: 'Desativar'
-  },
-  {
-    id: 'produtos', title: 'Produtos', singular: 'produto', endpoint: '/produtos', listKey: 'produtos',
-    itemKey: 'produto', idField: 'id_produto', icon: 'package',
-    columns: ['id_produto', 'nome', 'preco', 'id_categoria', 'atualizado_em'],
-    createFields: [
-      text('nome', 'Nome', { required: true }),
-      text('descricao', 'Descrição', { multiline: true, nullable: true }),
-      number('preco', 'Preço', { required: true, min: 0, step: '0.01' }),
-      text('imagem_produto', 'URL da imagem', { nullable: true }),
-      number('id_categoria', 'ID da categoria', { min: 1, nullable: true })
+    fields: [
+      {
+        ...idField('Produto', 'id_produto'),
+        options: { endpoint: '/produtos', key: 'produtos', id: 'id_produto', label: 'nome' }
+      },
+      {
+        ...idField('Funcionário', 'id_funcionario'),
+        options: { endpoint: '/funcionario', key: 'funcionarios', id: 'id_funcionario', label: 'nome' }
+      },
+      positiveInteger('Quantidade', 'quantidade'),
+      currency('Valor unitário', 'valor_unitario'),
+      { name: 'data_saida', label: 'Data de saída', type: 'date', nullable: true },
+      optionalText('Destino', 'destino')
     ],
-    editFields: [
-      text('nome', 'Nome'), text('descricao', 'Descrição', { multiline: true, nullable: true }),
-      number('preco', 'Preço', { min: 0, step: '0.01' }),
-      text('imagem_produto', 'URL da imagem', { nullable: true }),
-      number('id_categoria', 'ID da categoria', { min: 1, nullable: true })
+    operations: ['create']
+  },
+  {
+    key: 'clientes', label: 'Clientes', icon: '◎', endpoint: '/clientes',
+    listKey: 'clientes', detailKey: 'cliente', idKey: 'id_cliente',
+    description: 'Cadastro e consulta de clientes.',
+    columns: [['id_cliente', 'Código'], ['nome', 'Nome'], ['email', 'Email'], ['contato', 'Contato']],
+    fields: [
+      requiredText('Nome', 'nome'),
+      { ...requiredText('Email', 'email'), type: 'email' },
+      optionalText('Contato', 'contato')
     ],
-    deleteLabel: 'Excluir'
+    operations: ['create', 'edit', 'delete']
   },
   {
-    id: 'estoque', title: 'Estoque', singular: 'item de estoque', endpoint: '/estoque', listKey: 'estoque',
-    itemKey: 'item', idField: 'id_produto', icon: 'boxes',
-    columns: ['id_produto', 'produto', 'quantidade', 'estoque_minimo', 'estoque_maximo', 'localizacao'],
-    editFields: [
-      number('estoque_minimo', 'Estoque mínimo', { min: 0, nullable: true }),
-      number('estoque_maximo', 'Estoque máximo', { min: 0, nullable: true }),
-      text('localizacao', 'Localização', { nullable: true })
-    ]
-  },
-  {
-    id: 'entradas', title: 'Entradas', singular: 'entrada', endpoint: '/entradas', listKey: 'entradas',
-    itemKey: 'entrada', idField: 'id_entrada', icon: 'arrow-down-to-line',
-    columns: ['id_entrada', 'id_produto', 'id_fornecedor', 'quantidade', 'valor_unitario', 'data_entrada'],
-    createFields: [
-      number('id_produto', 'ID do produto', { required: true, min: 1 }),
-      number('id_fornecedor', 'ID do fornecedor', { required: true, min: 1 }),
-      number('quantidade', 'Quantidade', { required: true, min: 1, step: 1 }),
-      number('valor_unitario', 'Valor unitário', { required: true, min: 0, step: '0.01' }),
-      date('data_entrada', 'Data da entrada'),
-      text('observacao', 'Observação', { multiline: true })
-    ]
-  },
-  {
-    id: 'saidas', title: 'Saídas', singular: 'saída', endpoint: '/saidas', listKey: 'saidas',
-    itemKey: 'saida', idField: 'id_saida', icon: 'arrow-up-from-line',
-    columns: ['id_saida', 'id_produto', 'id_funcionario', 'quantidade', 'valor_unitario', 'data_saida'],
-    createFields: [
-      number('id_produto', 'ID do produto', { required: true, min: 1 }),
-      number('id_funcionario', 'ID do funcionário', { required: true, min: 1 }),
-      number('quantidade', 'Quantidade', { required: true, min: 1, step: 1 }),
-      number('valor_unitario', 'Valor unitário', { required: true, min: 0, step: '0.01' }),
-      date('data_saida', 'Data da saída'),
-      text('destino', 'Destino')
-    ]
-  },
-  {
-    id: 'pedidos', title: 'Pedidos', singular: 'pedido', endpoint: '/pedidos', listKey: 'pedidos',
-    itemKey: 'pedido', idField: 'id_pedido', icon: 'shopping-bag',
-    columns: ['id_pedido', 'cliente', 'status', 'data_pedido', 'criado_em'],
-    createFields: [
-      select('status', 'Status', [{ label: 'Ativo', value: '1' }, { label: 'Inativo', value: '0' }]),
-      date('data_pedido', 'Data do pedido'),
-      number('id_cliente', 'ID do cliente', { min: 1, nullable: true })
+    key: 'fornecedores', label: 'Fornecedores', icon: '◇', endpoint: '/fornecedores',
+    listKey: 'fornecedores', detailKey: 'fornecedor', idKey: 'id_fornecedor',
+    description: 'Cadastro de fornecedores e contatos comerciais.',
+    columns: [
+      ['id_fornecedor', 'Código'], ['nome', 'Nome'], ['empresa', 'Empresa'],
+      ['email', 'Email'], ['telefone', 'Telefone'], ['cidade', 'Cidade'], ['estado', 'UF']
     ],
-    editFields: [
-      select('status', 'Status', [{ label: 'Ativo', value: '1' }, { label: 'Inativo', value: '0' }]),
-      date('data_pedido', 'Data do pedido'),
-      number('id_cliente', 'ID do cliente', { min: 1, nullable: true })
-    ]
-  },
-  {
-    id: 'itens-pedido', title: 'Itens do pedido', singular: 'item do pedido', endpoint: '/pedido-itens', listKey: 'itens',
-    itemKey: 'item', idField: 'id_item', icon: 'list-ordered',
-    columns: ['id_item', 'id_pedido', 'produto', 'quantidade', 'valor_unitario', 'subtotal'],
-    createFields: [
-      number('id_pedido', 'ID do pedido', { required: true, min: 1 }),
-      number('id_produto', 'ID do produto', { required: true, min: 1 }),
-      number('quantidade', 'Quantidade', { required: true, min: 1, step: 1 }),
-      number('valor_unitario', 'Valor unitário', { required: true, min: 0, step: '0.01' })
+    fields: [
+      requiredText('Nome', 'nome'),
+      optionalText('Empresa', 'empresa'),
+      { ...optionalText('Email', 'email'), type: 'email' },
+      optionalText('Telefone', 'telefone'),
+      optionalText('Cidade', 'cidade'),
+      { ...optionalText('Estado', 'estado'), maxLength: 2 }
     ],
-    editFields: [
-      number('quantidade', 'Quantidade', { min: 1, step: 1 }),
-      number('valor_unitario', 'Valor unitário', { min: 0, step: '0.01' })
+    operations: ['create', 'edit', 'delete']
+  },
+  {
+    key: 'funcionario', label: 'Funcionários', icon: '♙', endpoint: '/funcionario',
+    listKey: 'funcionarios', detailKey: 'funcionario', idKey: 'id_funcionario',
+    description: 'Cadastro dos funcionários e cargos.',
+    columns: [
+      ['id_funcionario', 'Código'], ['nome', 'Nome'], ['cargo', 'Cargo'],
+      ['salario', 'Salário'], ['telefone', 'Telefone'], ['email', 'Email']
     ],
-    deleteLabel: 'Remover'
+    fields: [
+      requiredText('Nome', 'nome'),
+      requiredText('Cargo', 'cargo'),
+      currency('Salário', 'salario'),
+      optionalText('Telefone', 'telefone'),
+      { ...optionalText('Email', 'email'), type: 'email' },
+      { name: 'data_admissao', label: 'Data de admissão', type: 'date', nullable: true }
+    ],
+    operations: ['create', 'edit', 'delete']
   },
   {
-    id: 'movimentacoes', title: 'Movimentações', singular: 'movimentação', endpoint: '/movimentacoes',
-    listKey: 'movimentacoes', itemKey: 'movimentacao', idField: 'id_movimentacao', icon: 'activity',
-    columns: ['id_movimentacao', 'produto', 'tipo', 'quantidade', 'data_movimentacao'],
-    createFields: [
-      number('id_produto', 'ID do produto', { min: 1, nullable: true }),
-      select('tipo', 'Tipo', [
-        { label: 'Entrada', value: 'E' }, { label: 'Saída', value: 'S' },
-        { label: 'Ajuste', value: 'A' }, { label: 'Pedido', value: 'P' },
-        { label: 'Transferência', value: 'T' }
-      ]),
-      number('quantidade', 'Quantidade', { min: 0, step: 1, nullable: true }),
-      date('data_movimentacao', 'Data da movimentação'),
-      text('observacao', 'Observação', { multiline: true })
-    ]
+    key: 'pedidos', label: 'Pedidos', icon: '▧', endpoint: '/pedidos',
+    listKey: 'pedidos', detailKey: 'pedido', idKey: 'id_pedido',
+    description: 'Crie pedidos e consulte seus itens.',
+    columns: [
+      ['id_pedido', 'Pedido'], ['cliente', 'Cliente'], ['status', 'Status'],
+      ['data_pedido', 'Data'], ['id_cliente', 'Cliente #']
+    ],
+    fields: [
+      {
+        name: 'status', label: 'Status', type: 'select', valueType: 'number', defaultValue: '1',
+        options: [
+          { value: '1', label: 'Ativo' },
+          { value: '0', label: 'Inativo' }
+        ]
+      },
+      { name: 'data_pedido', label: 'Data do pedido', type: 'date', nullable: true },
+      {
+        ...idField('Cliente', 'id_cliente'), required: false, nullable: true,
+        options: { endpoint: '/clientes', key: 'clientes', id: 'id_cliente', label: 'nome' }
+      }
+    ],
+    operations: ['create', 'edit']
   },
   {
-    id: 'historico-precos', title: 'Histórico de preços', singular: 'registro de preço', endpoint: '/historico-precos',
-    listKey: 'historico', itemKey: 'registro', idField: 'id_historico', icon: 'chart-no-axes-combined',
-    columns: ['id_historico', 'produto', 'preco', 'vigencia'],
-    createFields: [
-      number('id_produto', 'ID do produto', { required: true, min: 1 }),
-      number('preco', 'Preço', { required: true, min: 0, step: '0.01' }),
-      date('vigencia', 'Vigência')
-    ]
+    key: 'pedido-itens', label: 'Itens de pedido', icon: '≡', endpoint: '/pedido-itens',
+    listKey: 'itens', detailKey: 'item', idKey: 'id_item',
+    description: 'Adicione produtos aos pedidos; o subtotal é calculado pela API.',
+    columns: [
+      ['id_item', 'Item'], ['id_pedido', 'Pedido #'], ['produto', 'Produto'],
+      ['quantidade', 'Quantidade'], ['valor_unitario', 'Valor unitário'], ['subtotal', 'Subtotal']
+    ],
+    fields: [
+      {
+        ...idField('Pedido', 'id_pedido'),
+        options: { endpoint: '/pedidos', key: 'pedidos', id: 'id_pedido', label: 'id_pedido', prefix: 'Pedido #' }
+      },
+      {
+        ...idField('Produto', 'id_produto'),
+        options: { endpoint: '/produtos', key: 'produtos', id: 'id_produto', label: 'nome' }
+      },
+      positiveInteger('Quantidade', 'quantidade'),
+      currency('Valor unitário', 'valor_unitario')
+    ],
+    operations: ['create', 'edit', 'delete']
   },
   {
-    id: 'logs', title: 'Logs', singular: 'log', endpoint: '/logs', listKey: 'logs',
-    itemKey: 'log', idField: 'id_log', icon: 'scroll-text',
-    columns: ['id_log', 'usuario', 'tabela_afetada', 'acao', 'registro', 'data_hora'],
-    createFields: [
-      text('usuario', 'Usuário'), text('tabela_afetada', 'Tabela afetada'),
-      text('acao', 'Ação'), number('registro', 'ID do registro', { min: 1, nullable: true }),
-      text('data_hora', 'Data e hora', { inputType: 'datetime-local' })
-    ]
+    key: 'movimentacoes', label: 'Movimentações', icon: '↔', endpoint: '/movimentacoes',
+    listKey: 'movimentacoes', detailKey: 'movimentacao', idKey: 'id_movimentacao',
+    description: 'Consulte e registre movimentações de inventário.',
+    columns: [
+      ['id_movimentacao', 'Código'], ['produto', 'Produto'], ['tipo', 'Tipo'],
+      ['quantidade', 'Quantidade'], ['data_movimentacao', 'Data'], ['observacao', 'Observação']
+    ],
+    fields: [
+      {
+        ...idField('Produto', 'id_produto'), required: false, nullable: true,
+        options: { endpoint: '/produtos', key: 'produtos', id: 'id_produto', label: 'nome' }
+      },
+      {
+        name: 'tipo', label: 'Tipo', type: 'select', nullable: true,
+        options: [
+          { value: 'E', label: 'Entrada (E)' },
+          { value: 'S', label: 'Saída (S)' },
+          { value: 'A', label: 'Ajuste (A)' },
+          { value: 'P', label: 'Pedido (P)' },
+          { value: 'T', label: 'Transferência (T)' }
+        ]
+      },
+      { name: 'quantidade', label: 'Quantidade', type: 'number', min: 0, step: 1, nullable: true },
+      { name: 'data_movimentacao', label: 'Data', type: 'date', nullable: true },
+      { name: 'observacao', label: 'Observação', type: 'textarea', nullable: true }
+    ],
+    operations: ['create']
+  },
+  {
+    key: 'historico-precos', label: 'Histórico de preços', icon: '⌁', endpoint: '/historico-precos',
+    listKey: 'historico', detailKey: 'registro', idKey: 'id_historico',
+    description: 'Registre preços e suas datas de vigência.',
+    columns: [['id_historico', 'Código'], ['produto', 'Produto'], ['preco', 'Preço'], ['vigencia', 'Vigência']],
+    fields: [
+      {
+        ...idField('Produto', 'id_produto'),
+        options: { endpoint: '/produtos', key: 'produtos', id: 'id_produto', label: 'nome' }
+      },
+      currency('Preço', 'preco'),
+      { name: 'vigencia', label: 'Vigência', type: 'date', nullable: true }
+    ],
+    operations: ['create']
+  },
+  {
+    key: 'logs', label: 'Logs', icon: '≋', endpoint: '/logs',
+    listKey: 'logs', detailKey: 'log', idKey: 'id_log',
+    description: 'Consulte e registre logs de ações.',
+    columns: [
+      ['id_log', 'Código'], ['usuario', 'Usuário'], ['tabela_afetada', 'Tabela'],
+      ['acao', 'Ação'], ['registro', 'Registro #'], ['data_hora', 'Data e hora']
+    ],
+    fields: [
+      optionalText('Usuário', 'usuario'),
+      optionalText('Tabela afetada', 'tabela_afetada'),
+      optionalText('Ação', 'acao'),
+      { name: 'registro', label: 'ID do registro', type: 'number', min: 1, nullable: true },
+      { name: 'data_hora', label: 'Data e hora', type: 'datetime-local', nullable: true }
+    ],
+    operations: ['create']
+  },
+  {
+    key: 'usuario', label: 'Usuários', icon: '♧', endpoint: '/usuario',
+    listKey: 'usuarios', detailKey: 'usuario', idKey: 'id_usuario',
+    description: 'Gerencie usuários ativos. Cadastro requer autenticação administrativa.',
+    columns: [
+      ['id_usuario', 'Código'], ['nome', 'Nome'], ['email', 'Email'],
+      ['contato', 'Contato'], ['genero', 'Gênero']
+    ],
+    fields: [
+      requiredText('Nome', 'nome'),
+      { ...requiredText('Email', 'email'), type: 'email' },
+      { name: 'senha', label: 'Senha (mínimo 8 caracteres)', type: 'password', requiredOnCreate: true, minLength: 8 },
+      optionalText('Contato', 'contato'),
+      { ...optionalText('Gênero', 'genero'), maxLength: 1 }
+    ],
+    operations: ['create', 'edit', 'delete']
   }
 ];

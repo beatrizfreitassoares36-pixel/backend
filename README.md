@@ -6,7 +6,7 @@ Esta API fornece operações REST para o gerenciamento de uma loja: produtos, ca
 
 Ela resolve a fragmentação de informações e de tarefas operacionais ao centralizar cadastro, consulta e atualização dos dados comerciais em um backend integrado a um banco MySQL.
 
-Este repositório entrega somente o backend/API; a interface frontend não faz parte do serviço documentado aqui.
+O repositório inclui o backend/API e uma interface web em `frontend/`. A interface usa os contratos REST documentados neste arquivo e, no modo de desenvolvimento, encaminha as chamadas à API pública hospedada.
 
 ## Funcionalidades da API
 
@@ -39,7 +39,7 @@ O Sequelize é usado para executar consultas e operações de persistência por 
 
 ## Executar
 
-Requisitos: Node.js, npm e uma instância MySQL com o schema da aplicação já provisionado. Este repositório não contém o DDL completo do banco; solicite o schema aprovado ao responsável pelo banco antes de configurar um ambiente novo. Não use nem publique dumps locais com dados de exemplo ou credenciais.
+Requisitos: Node.js, npm e uma instância MySQL com o schema da aplicação já provisionado.
 
 1. Clone o repositório, acesse a pasta do projeto e instale as dependências:
 
@@ -62,7 +62,13 @@ Requisitos: Node.js, npm e uma instância MySQL com o schema da aplicação já 
    CORS_ORIGIN=<origem-autorizada>
    ```
 
-   `DB_HOST`, `DB_USER`, `DB_NAME` e `JWT_SECRET` são necessários. Informe `DB_PASSWORD` quando o MySQL exigir senha. `PORT` é opcional (padrão `5000`); `DB_PORT` é opcional (padrão `3306`). `CORS_ORIGIN` é opcional; sem ela, o servidor aceita chamadas de qualquer origem. Para restringir ou permitir várias origens, informe a(s) origem(ns), separadas por vírgulas.
+   `DB_HOST`, `DB_USER`, `DB_NAME` e `JWT_SECRET` são necessários. Informe `DB_PASSWORD` quando o MySQL exigir senha. `PORT` é opcional (padrão `5000`); `DB_PORT` é opcional (padrão `3306`). `CORS_ORIGIN` é opcional. Para um frontend em outra origem, configure a origem exata, incluindo protocolo e porta quando houver, sem caminho ou barra final. Para várias origens, separe-as por vírgulas:
+
+   ```env
+   CORS_ORIGIN=http://localhost:5173,https://seu-frontend.example.com
+   ```
+
+   Sem `CORS_ORIGIN`, chamadas same-origin continuam funcionando e o servidor não concede acesso CORS a outros domínios. O middleware permite os métodos usados pela API e os cabeçalhos `Content-Type` e `Authorization`; não habilita credenciais/cookies. Origens configuradas que não sejam URLs HTTP/HTTPS válidas fazem a aplicação falhar na inicialização.
 
    Gere um `JWT_SECRET` forte localmente, por exemplo com `node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"`. Nunca coloque valores reais de senha, tokens ou segredos neste README, no `.env.example` ou em arquivos públicos do GitHub. O `.env` está no `.gitignore`.
 
@@ -72,15 +78,7 @@ Requisitos: Node.js, npm e uma instância MySQL com o schema da aplicação já 
    npm run db:check
    ```
 
-4. Execute a suíte automatizada:
-
-   ```bash
-   npm test
-   ```
-
-   Os testes de unidade e de rotas usam dados simulados e não criam nem alteram registros no MySQL. `npm run db:check` valida separadamente a conectividade com o banco configurado.
-
-5. Inicie a API:
+4. Inicie a API:
 
    ```bash
    npm start
@@ -92,17 +90,46 @@ Requisitos: Node.js, npm e uma instância MySQL com o schema da aplicação já 
    npm run dev
    ```
 
-A API escuta em `0.0.0.0`. O endereço local padrão é `http://localhost:5000`. O projeto não executa `sequelize.sync()` nem cria/altera tabelas automaticamente; provisione o schema por meio de DDL/migrações revisadas e adequadas ao ambiente. Não publique dumps de banco ou dados reais.
+A API valida a porta, autentica no MySQL e só então começa a escutar em `0.0.0.0`. Se as variáveis do banco estiverem ausentes, a conexão falhar ou a porta for inválida, a inicialização falha explicitamente sem abrir o servidor HTTP. O endereço local padrão é `http://localhost:5000`. Ao receber `SIGINT` ou `SIGTERM`, o servidor deixa de aceitar conexões e fecha o pool do banco. O projeto não executa `sequelize.sync()` nem cria/altera tabelas automaticamente; provisione o schema por meio de DDL/migrações revisadas e adequadas ao ambiente. Não publique dumps de banco ou dados reais.
+
+### Preparar o banco de dados
+
+O repositório não contém um script completo para criar todas as tabelas. A pasta `migrations/` inclui somente uma migração pontual, não o schema inteiro; o dump SQL de exemplo é local e está ignorado pelo Git. Antes de executar a API com dados reais, obtenha o DDL/schema completo de uma fonte autorizada (por exemplo, do administrador do banco) e provisione um banco MySQL compatível. Configure `DB_HOST` para aceitar conexões do ambiente da API e use uma conta de banco dedicada, com permissões mínimas de `SELECT`, `INSERT`, `UPDATE` e `DELETE` nas tabelas da aplicação; aplique alterações de schema com uma conta administrativa separada. Não envie dumps com dados ou senhas ao GitHub.
+
+O comando `npm run db:check` confirma a autenticação e uma consulta `SELECT 1`; ele não verifica nem cria as tabelas da aplicação.
+
+### Executar os testes automatizados
+
+```bash
+npm test
+```
+
+Os testes usam o runner nativo `node:test`, iniciam servidores HTTP locais temporários e simulam o modelo no teste de login. Eles cobrem saúde da API, validações, autorização e login, e não criam nem alteram registros no banco. A configuração do Sequelize exige que `DB_HOST`, `DB_USER` e `DB_NAME` estejam definidos ao carregar a aplicação; por isso, crie o `.env` antes de executar `npm test`. Os testes não abrem conexão com o MySQL; use `npm run db:check` separadamente para testar a conectividade real.
+
+### Executar a interface frontend
+
+A interface usa React e Vite e pode ser iniciada sem configurar um banco local. Por padrão, o servidor de desenvolvimento encaminha as chamadas REST para a API publicada `https://backend-1-puom.onrender.com`, evitando uma chamada cross-origin direta pelo navegador:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Abra o endereço local mostrado pelo Vite (normalmente `http://localhost:5173`). Entre com uma conta ativa provisionada no banco da aplicação. A interface cobre login, consulta e operações CRUD que cada rota oferece para usuários, funcionários, categorias, clientes, fornecedores, produtos, estoque, entradas, saídas, pedidos e itens, movimentações, histórico de preços e logs. O cadastro de usuários continua protegido por JWT: não existe inscrição pública ou conta inicial padrão, então a primeira conta precisa ser criada pelo responsável pelo banco em um processo administrativo seguro. O token de login é mantido somente na sessão atual do navegador e enviado no cabeçalho `Authorization: Bearer <JWT>`.
+
+Para validar a versão de produção dos arquivos estáticos, execute `npm run build` dentro de `frontend/`; os arquivos gerados em `frontend/dist/` são servidos pelo backend na mesma origem. Se a interface for hospedada em uma origem diferente da API, defina `VITE_API_BASE_URL=https://backend-1-puom.onrender.com` durante o build e cadastre a origem exata do frontend na variável `CORS_ORIGIN` do serviço backend no Render. O proxy Vite é apenas para desenvolvimento e não é incluído no build de produção.
 
 ## Publicar no Render
 
-O arquivo `render.yaml` configura um serviço Web Node no plano gratuito, instala as dependências do backend, executa os testes, inicia a API com `npm start` e usa `GET /teste` como verificação de saúde.
+O arquivo `render.yaml` configura um serviço Web Node no plano gratuito, instala as dependências, executa os testes, compila a interface em `frontend/dist/`, inicia a API com `npm start` e usa `GET /teste` como verificação de saúde. A interface compilada é servida pelo próprio backend na origem da API; assim, não requer CORS para esse acesso same-origin.
 
 1. Envie este repositório ao GitHub e, no Render, crie um **Blueprint** conectado ao repositório que contém `render.yaml`.
-2. No serviço, informe `DB_HOST`, `DB_USER`, `DB_PASSWORD` e `DB_NAME` do MySQL hospedado. `DB_PORT` está definido como `3306`; altere-o no painel se o provedor usar outra porta.
+2. No serviço, informe `DB_HOST`, `DB_USER`, `DB_PASSWORD` e `DB_NAME` do MySQL hospedado. `DB_PORT` está definido como `3306`; altere-o no painel se o provedor usar outra porta. Garanta no provedor do MySQL que conexões do Render sejam permitidas e que a conta de aplicação tenha as permissões descritas acima.
 3. Gere uma `JWT_SECRET` forte e configure-a como variável secreta no Render. Não coloque senhas ou segredos no repositório nem compartilhe o `.env`.
-4. Se o banco restringir conexões por IP, permita as conexões de saída do Render conforme o plano e a documentação do provedor. Se o provedor do MySQL exigir TLS, confirme a compatibilidade antes de publicar; a configuração atual do pool não habilita TLS.
-5. O serviço implantado está disponível em `https://backend-1-puom.onrender.com`. Verifique `GET https://backend-1-puom.onrender.com/teste`. O plano gratuito pode suspender o serviço quando estiver ocioso e causar demora na primeira requisição.
+4. Se o frontend estiver hospedado em outra origem, configure `CORS_ORIGIN` no Render para essa origem exata; para várias origens, use uma lista separada por vírgulas. Se frontend e API usam o mesmo domínio, não é necessário habilitar CORS para esse acesso same-origin.
+5. Se o provedor do MySQL exigir TLS, confirme e configure a compatibilidade antes de publicar; a configuração atual do pool não habilita TLS.
+6. O serviço implantado está disponível em `https://backend-1-puom.onrender.com`. Verifique `GET https://backend-1-puom.onrender.com/teste`. O plano gratuito pode suspender o serviço quando estiver ocioso e causar demora na primeira requisição.
 
 O serviço precisa ser conectado ao repositório no painel do Render para publicar e fazer deploy automático dos commits. Variáveis com `sync: false` são solicitadas/configuradas fora do YAML e não armazenam credenciais no Git.
 
@@ -118,7 +145,7 @@ O serviço Render foi criado e sua URL pública foi verificada com sucesso:
 
 O projeto configura uma instância Sequelize 6 em `sequelize.js` e define os modelos das tabelas MySQL em `models/index.js`. As rotas usam o ORM para consultas, inserções, atualizações e exclusões; operações que exigem atomicidade, como registrar saídas e atualizar o estoque, usam transações Sequelize. O pool está limitado a 10 conexões e o logging SQL fica desativado.
 
-Os modelos mapeiam as tabelas existentes e não sincronizam nem alteram o schema automaticamente. Crie ou atualize o banco por meio das migrações/DDL administradas pelo projeto; não execute `sync({ alter: true })` em produção.
+Os modelos mapeiam as tabelas existentes e não sincronizam nem alteram o schema automaticamente. O repositório não fornece DDL completo para criação inicial das tabelas; obtenha e aplique o schema por um processo administrativo autorizado. Não execute `sync({ alter: true })` em produção.
 
 Valide as credenciais e a conectividade com uma consulta somente de leitura:
 
@@ -186,23 +213,13 @@ Os endpoints recebem corpos JSON (`Content-Type: application/json`). Campos e ex
 
 `GET /teste` retorna HTTP `200` e `{ "mensagem": "Tudo OK" }`.
 
-Verifique a instância local ou publicada com:
+Teste o serviço publicado:
 
 ```bash
 curl -i https://backend-1-puom.onrender.com/teste
 ```
 
-Para testar localmente, substitua a URL por `http://localhost:5000/teste`. A resposta esperada inclui status `200` e o JSON `{ "mensagem": "Tudo OK" }`.
-
-### Executar os testes automatizados
-
-Na raiz do repositório, após `npm install`, execute:
-
-```bash
-npm test
-```
-
-O comando usa o test runner integrado do Node.js (`node --test`) para verificar validações, autorização, endpoint de saúde e login (incluindo credenciais inválidas e configuração ausente). Os testes de login substituem o acesso ao modelo, portanto não precisam de conexão MySQL. Para verificar separadamente o banco real configurado no `.env`, execute `npm run db:check`.
+Para testar localmente, use `http://localhost:5000/teste`.
 
 ## Endpoints
 
@@ -345,7 +362,7 @@ curl -X POST http://localhost:5000/categorias \
   -d "{\"nome\":\"Bebidas\",\"descricao\":\"Bebidas e sucos\"}"
 ```
 
-Exemplo de resposta (`201 Created`; é necessário substituir `<JWT>` por um token válido):
+Exemplo de resposta (`201 Created`; substitua `<JWT>` por um token válido):
 
 ```json
 {

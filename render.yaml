@@ -3,7 +3,7 @@ services:
     name: backend
     runtime: node
     plan: free
-    buildCommand: npm ci --omit=dev && npm test
+    buildCommand: npm ci --omit=dev && npm test && npm --prefix frontend ci && npm --prefix frontend run build
     startCommand: npm start
     healthCheckPath: /teste
     envVars:
@@ -20,4 +20,6 @@ services:
       - key: DB_NAME
         sync: false
       - key: JWT_SECRET
+        sync: false
+      - key: CORS_ORIGIN
         sync: false

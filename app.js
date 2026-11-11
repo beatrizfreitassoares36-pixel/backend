@@ -6,13 +6,30 @@ const path = require('path');
 const fs = require('fs');
 const app = express();
 const autenticar = require('./route/auth');
+const corsOrigins = (process.env.CORS_ORIGIN || '')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean);
+
+for (const origin of corsOrigins) {
+    let parsedOrigin;
+    try {
+        parsedOrigin = new URL(origin);
+    } catch {
+        throw new Error(`CORS_ORIGIN contém uma origem inválida: ${origin}.`);
+    }
+
+    if (!['http:', 'https:'].includes(parsedOrigin.protocol) ||
+        parsedOrigin.origin !== origin) {
+        throw new Error(`CORS_ORIGIN deve conter origens HTTP/HTTPS sem caminho: ${origin}.`);
+    }
+}
+
 app.use(morgan('dev'));
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json({ limit: '1mb' }));
 app.use(cors({
-    origin: process.env.CORS_ORIGIN
-        ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
-        : '*',
+    origin: corsOrigins.length ? corsOrigins : false,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization']
 }));

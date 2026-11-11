@@ -1,37 +1,39 @@
-const configuredBaseUrl = import.meta.env.VITE_API_URL?.trim();
-const baseUrl = configuredBaseUrl ? configuredBaseUrl.replace(/\/+$/, '') : '';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 
-export async function apiRequest(path, options = {}) {
-  let response;
-  const token = sessionStorage.getItem('loja-token');
-  try {
-    response = await fetch(`${baseUrl}${path}`, {
-      ...options,
-      headers: {
-        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...options.headers
-      }
-    });
-  } catch {
-    throw new Error('Não foi possível conectar à API. Verifique a URL e tente novamente.');
+export async function apiRequest(path, { token, ...options } = {}) {
+  const headers = new Headers(options.headers || {});
+  if (options.body !== undefined) {
+    headers.set('Content-Type', 'application/json');
+  }
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const contentType = response.headers.get('content-type') || '';
-  const body = contentType.includes('application/json')
-    ? await response.json()
-    : await response.text();
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers
+    });
+  } catch {
+    throw new Error('Não foi possível conectar à API. Verifique a conexão e tente novamente.');
+  }
 
+  const body = await response.json().catch(() => null);
   if (!response.ok) {
-    const message = typeof body === 'object'
-      ? body.mensagem || body.erro?.mensagem
-      : body;
-    throw new Error(message || `A API respondeu com erro ${response.status}.`);
+    if (response.status === 401 && token) {
+      window.dispatchEvent(new Event('api:unauthorized'));
+    }
+    throw new Error(
+      body?.mensagem ||
+      body?.erro?.mensagem ||
+      `A API respondeu com erro HTTP ${response.status}.`
+    );
   }
 
   return body;
 }
 
-export function apiUrl(path) {
-  return `${baseUrl}${path}`;
+export function getToken() {
+  return sessionStorage.getItem('gestao-token');
 }
