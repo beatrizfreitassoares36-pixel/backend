@@ -133,6 +133,12 @@ O arquivo `render.yaml` configura um serviço Web Node no plano gratuito, instal
 
 O serviço precisa ser conectado ao repositório no painel do Render para publicar e fazer deploy automático dos commits. Variáveis com `sync: false` são solicitadas/configuradas fora do YAML e não armazenam credenciais no Git.
 
+## Publicar os arquivos estáticos no AlwaysData
+
+O frontend React/Vite deve ser compilado antes do envio. Configure a URL da API durante o build, envie o conteúdo de `frontend/dist/` para `/home/<conta>/www/frontend-static/` por SFTP/SSH e configure o site do AlwaysData como **Static files**, com a raiz `www/frontend-static/`. Usar uma pasta dedicada como raiz evita servir arquivos PHP antigos que possam existir em `www/`.
+
+Como o frontend estático e a API usam origens diferentes, configure `CORS_ORIGIN=https://beatrizfreitassoares.alwaysdata.net` nas variáveis do serviço backend no Render e aguarde o deploy. O frontend usa `VITE_API_BASE_URL=https://backend-1-puom.onrender.com`; valide que a página e os arquivos `/assets/` respondam com HTTP 200, que a preflight CORS retorne HTTP 204 e que `GET https://backend-1-puom.onrender.com/teste` retorne a mensagem de saúde da API.
+
 ### Endereço público
 
 O serviço Render foi criado e sua URL pública foi verificada com sucesso:
